@@ -9,8 +9,12 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   } catch {
     return new Response(JSON.stringify({ error: 'JSON non valido' }), { status: 400 });
   }
+  const adminPassword = import.meta.env.ADMIN_PASSWORD || process.env.ADMIN_PASSWORD;
+  if (!adminPassword) {
+    return new Response(JSON.stringify({ error: 'Accesso admin non configurato' }), { status: 503 });
+  }
   const hashed = createHash('sha256').update(password).digest('hex');
-  const expected = createHash('sha256').update(import.meta.env.ADMIN_PASSWORD).digest('hex');
+  const expected = createHash('sha256').update(adminPassword).digest('hex');
 
   if (hashed !== expected) {
     return new Response(JSON.stringify({ error: 'Password errata' }), { status: 401 });
