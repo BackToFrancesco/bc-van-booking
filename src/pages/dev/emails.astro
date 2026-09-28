@@ -1,0 +1,70 @@
+---
+import { isMockTransport, readOutbox } from '../../lib/email';
+
+// Local-only viewer for mocked emails (EMAIL_TRANSPORT=mock)
+if (!isMockTransport()) return new Response('Not found', { status: 404 });
+
+const emails = readOutbox().reverse();
+const selectedId = Astro.url.searchParams.get('id') ?? emails[0]?.id;
+const selected = emails.find((e) => e.id === selectedId);
+const fmt = (iso: string) => new Date(iso).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'medium', timeZone: 'Europe/Rome' });
+---
+
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Email (mock) — BC Pulmini</title>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+      :root { --red: #C8102E; }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body { font-family: 'Inter', system-ui, sans-serif; background: #f0f0f0; color: #1a1a1a; height: 100vh; display: flex; flex-direction: column; }
+      header { background: var(--red); color: white; padding: 0.75rem 1.5rem; font-weight: 700; display: flex; justify-content: space-between; align-items: center; }
+      header a { color: white; font-size: 0.85rem; }
+      main { flex: 1; display: grid; grid-template-columns: 360px 1fr; min-height: 0; }
+      .list { overflow-y: auto; background: white; border-right: 1px solid #e5e5e5; }
+      .item { display: block; padding: 0.75rem 1rem; border-bottom: 1px solid #f0f0f0; color: inherit; text-decoration: none; }
+      .item.active { background: #fff5f5; border-left: 3px solid var(--red); }
+      .item .subject { font-weight: 600; font-size: 0.86rem; }
+      .item .meta { font-size: 0.75rem; color: #777; margin-top: 0.2rem; }
+      .preview { display: flex; flex-direction: column; min-height: 0; }
+      .preview-head { background: white; padding: 1rem 1.25rem; border-bottom: 1px solid #e5e5e5; font-size: 0.88rem; line-height: 1.6; }
+      iframe { flex: 1; border: none; background: white; margin: 1rem; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+      .empty { padding: 2rem; color: #888; }
+      @media (max-width: 760px) { main { grid-template-columns: 1fr; grid-template-rows: 40vh 1fr; } }
+    </style>
+  </head>
+  <body>
+    <header>
+      <span>📬 Email inviate (mock) — {emails.length}</span>
+      <a href="/admin">← Admin</a>
+    </header>
+    <main>
+      <div class="list">
+        {emails.length === 0 && <div class="empty">Nessuna email ancora.</div>}
+        {emails.map((e) => (
+          <a class:list={['item', { active: e.id === selectedId }]} href={`?id=${e.id}`}>
+            <div class="subject">{e.subject}</div>
+            <div class="meta">A: {e.to} · {fmt(e.timestamp)}</div>
+          </a>
+        ))}
+      </div>
+      <div class="preview">
+        {selected ? (
+          <>
+            <div class="preview-head">
+              <div><strong>Da:</strong> {selected.from}</div>
+              <div><strong>A:</strong> {selected.to}</div>
+              <div><strong>Oggetto:</strong> {selected.subject}</div>
+            </div>
+            <iframe srcdoc={`<body style="font-family:system-ui,sans-serif;padding:1rem 1.5rem;line-height:1.5">${selected.html}</body>`} title="Anteprima email"></iframe>
+          </>
+        ) : (
+          <div class="empty">Seleziona un'email.</div>
+        )}
+      </div>
+    </main>
+  </body>
+</html>

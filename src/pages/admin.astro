@@ -1,0 +1,927 @@
+---
+import { listVans, listPendingBookings, listBlockSeries } from '../lib/repo';
+import { formatDateTime, formatDuration } from '../lib/time';
+import { isMockTransport } from '../lib/email';
+
+const [vans, pendingBookings, blockSeries] = await Promise.all([
+  listVans(),
+  listPendingBookings(),
+  listBlockSeries(),
+]);
+const vanName = new Map(vans.map((v) => [v.id, v.name]));
+const showDevEmails = isMockTransport();
+
+const DAY_SHORT = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
+const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
+const hours = Array.from({ length: 25 }, (_, i) => i);
+const pad = (n: number) => String(n).padStart(2, '0');
+const fmtDate = (s: string) => s.split('-').reverse().join('/');
+---
+
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Admin Pulmini — Basket Conselve</title>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+      :root { --red: #C8102E; --red-dark: #a00e25; }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body { font-family: 'Inter', system-ui, sans-serif; background: #f0f0f0; color: #1a1a1a; }
+      body.modal-open { overflow: hidden; }
+      header { background: var(--red); color: white; padding: 0.6rem 2rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+      .header-left { display: flex; align-items: center; gap: 0.75rem; }
+      .header-right { display: flex; align-items: center; gap: 0.5rem; }
+      .header-logo { height: 36px; width: auto; display: block; }
+      header h1 { font-size: 1rem; font-weight: 600; opacity: 0.92; }
+      .logout, .header-link {
+        background: rgba(255,255,255,.2); border: 1px solid rgba(255,255,255,.3); color: white;
+        padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer;
+        font-size: 0.88rem; font-weight: 600; font-family: inherit; text-decoration: none;
+        transition: background 0.1s, transform 0.1s;
+        -webkit-tap-highlight-color: transparent;
+        touch-action: manipulation;
+        white-space: nowrap;
+      }
+      @media (hover: hover) {
+        .logout:hover, .header-link:hover { background: rgba(255,255,255,.35); }
+      }
+      .logout:active, .header-link:active { background: rgba(255,255,255,.45); transform: scale(0.96); }
+      .container { max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
+      .section-title { font-size: 1rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--red); margin-bottom: 0.75rem; padding-left: 0.5rem; border-left: 3px solid var(--red); }
+      .card { background: white; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,.07); margin-bottom: 2rem; overflow: hidden; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { padding: 0.7rem 1rem; text-align: left; font-size: 0.86rem; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+      th { background: #fafafa; font-weight: 700; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; color: #666; }
+      tr:last-child td { border-bottom: none; }
+      .muted { color: #888; font-size: 0.8rem; }
+      .btn {
+        padding: 0.45rem 0.95rem; border: none; border-radius: 5px; cursor: pointer;
+        font-size: 0.85rem; font-weight: 600; margin-right: 0.3rem; font-family: inherit;
+        transition: background 0.1s, filter 0.1s, transform 0.1s;
+        -webkit-tap-highlight-color: transparent;
+        touch-action: manipulation;
+      }
+      .btn:disabled { background: #e5e7eb !important; color: #9ca3af !important; cursor: not-allowed; filter: none !important; }
+      .btn:active { transform: scale(0.96); }
+      .bookings-table td[data-label="Azioni"] .btn {
+        display: block;
+        width: 100%;
+        margin: 0 0 0.4rem 0;
+        text-align: center;
+      }
+      .bookings-table td[data-label="Azioni"] .btn:last-child { margin-bottom: 0; }
+
+      /* Calendar */
+      .calendar-toolbar { display: flex; gap: 0.5rem; flex-wrap: wrap; padding: 1.25rem 1.25rem 0; align-items: center; }
+      .calendar-toolbar .label { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: #666; margin-right: 0.25rem; }
+      .chip {
+        border: 1.5px solid #ddd; background: white; color: #333; border-radius: 999px;
+        padding: 0.4rem 0.95rem; font-family: inherit; font-size: 0.85rem; font-weight: 600; cursor: pointer;
+        -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+      }
+      .chip.active { background: var(--red); border-color: var(--red); color: white; }
+      .legend { display: flex; gap: 1rem; flex-wrap: wrap; padding: 0.75rem 1.25rem 0; }
+      .legend-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; font-weight: 500; }
+      .dot { width: 11px; height: 11px; border-radius: 50%; }
+      .calendar-hint { font-size: 0.8rem; color: #777; padding: 0.5rem 1.25rem 0; }
+      #admin-calendar { padding: 1.25rem; }
+
+      /* Season blocks */
+      .series-form { padding: 1.25rem; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.9rem 1rem; border-bottom: 1px solid #f0f0f0; }
+      .series-form .full { grid-column: 1 / -1; }
+      .series-form .half { grid-column: span 2; }
+      .form-label { display: block; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #555; margin-bottom: 0.3rem; }
+      .weekdays { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+      .weekday { position: relative; }
+      .weekday input { position: absolute; opacity: 0; pointer-events: none; }
+      .weekday span {
+        display: inline-block; min-width: 3rem; text-align: center; padding: 0.45rem 0.6rem;
+        border: 1.5px solid #ddd; border-radius: 6px; font-size: 0.85rem; font-weight: 600; cursor: pointer; user-select: none;
+      }
+      .weekday input:checked + span { background: var(--red); border-color: var(--red); color: white; }
+      .weekday input:focus-visible + span { outline: 2px solid var(--red); outline-offset: 2px; }
+      .series-actions { display: flex; justify-content: flex-end; align-items: center; gap: 0.75rem; }
+      .form-error { color: #dc2626; font-size: 0.85rem; }
+      .conflicts { background: #fef2f2; border-left: 3px solid #dc2626; border-radius: 4px; padding: 0.7rem 0.9rem; font-size: 0.85rem; color: #444; }
+      .conflicts ul { margin: 0.4rem 0 0.6rem 1.1rem; }
+      .conflicts .btn { margin-top: 0.25rem; }
+
+      /* Modals */
+      .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 100; align-items: center; justify-content: center; }
+      .modal-overlay.open { display: flex; }
+      .modal { background: white; border-radius: 12px; padding: 2rem; width: 100%; max-width: 480px; box-shadow: 0 8px 32px rgba(0,0,0,.18); max-height: calc(100dvh - 3rem); overflow-y: auto; }
+      .modal-header { border-bottom: 3px solid var(--red); padding-bottom: 0.75rem; margin-bottom: 1.25rem; display: flex; justify-content: space-between; align-items: center; }
+      .modal-header h2 { font-size: 1.2rem; font-weight: 800; color: var(--red); }
+      .modal-close {
+        background: none; border: none; font-size: 1.6rem; cursor: pointer; color: #666;
+        line-height: 1; width: 40px; height: 40px; border-radius: 50%;
+        display: inline-flex; align-items: center; justify-content: center;
+        transition: background 0.1s;
+        -webkit-tap-highlight-color: transparent;
+        touch-action: manipulation;
+      }
+      @media (hover: hover) {
+        .modal-close:hover { background: #f0f0f0; }
+      }
+      .modal-close:active { background: #e0e0e0; }
+      .modal dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.4rem 1rem; font-size: 0.9rem; align-items: center; }
+      .modal dt { font-weight: 700; color: #555; white-space: nowrap; }
+      .modal dd { color: #1a1a1a; min-width: 0; overflow: hidden; }
+      .modal-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid #f0f0f0; }
+      .notify-help { font-size: 0.8rem; color: #666; margin-top: 0.2rem; line-height: 1.35; }
+      .error-msg { color: #dc2626; font-size: 0.85rem; margin-top: 0.5rem; }
+      .detail-edit-row { flex-direction: column !important; align-items: stretch !important; }
+      .notify-label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.88rem; color: #444; }
+      .notify-label input[type="checkbox"] { width: 1rem; height: 1rem; accent-color: var(--red); }
+      .edit-buttons { display: flex; gap: 0.5rem; justify-content: flex-end; flex-wrap: wrap; }
+      .block-modal .form-label { margin-top: 0.75rem; }
+
+      /* ── Mobile ─────────────────────────────────────────────────── */
+      @media (max-width: 760px) {
+        header { padding: 0.55rem 1rem; }
+        .header-logo { height: 30px; }
+        header h1 { font-size: 0.78rem; }
+        .header-link { display: none; }
+        .container { padding: 0 0.65rem; }
+
+        /* Bookings table → card stack */
+        .bookings-table { display: block; border-collapse: separate; }
+        .bookings-table tbody { display: block; }
+        .bookings-table thead { display: none; }
+        .bookings-table tr { display: block; padding: 0.85rem 1rem; border-bottom: none; }
+        .bookings-table tr + tr { border-top: 2px solid #e0e0e0; }
+        .bookings-table td {
+          display: grid;
+          grid-template-columns: 78px 1fr;
+          align-items: start;
+          gap: 0.2rem 0.5rem;
+          padding: 0.18rem 0;
+          border: none;
+          font-size: 0.84rem;
+        }
+        .bookings-table td::before {
+          content: attr(data-label);
+          font-weight: 700;
+          font-size: 0.68rem;
+          text-transform: uppercase;
+          color: #999;
+          letter-spacing: 0.04em;
+          padding-top: 2px;
+          white-space: nowrap;
+        }
+        .bookings-table td[data-label="Azioni"] { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.75rem; }
+        .bookings-table td[data-label="Azioni"]::before { display: none; }
+        .bookings-table td[data-label="Azioni"] .btn { margin: 0; padding: 0.65rem 1rem; font-size: 0.92rem; width: 100%; min-height: 44px; }
+        .bookings-table td.empty { display: block; }
+        .bookings-table td.empty::before { display: none; }
+
+        .series-form { grid-template-columns: 1fr 1fr; padding: 1rem; }
+        .series-form .half { grid-column: 1 / -1; }
+        .series-actions .btn { width: 100%; min-height: 46px; }
+
+        .modal { margin: 0.75rem; padding: 1.25rem; max-width: calc(100% - 1.5rem); max-height: calc(100dvh - 1.5rem); }
+        .modal-actions { flex-direction: column; }
+        .modal dl { grid-template-columns: 1fr; gap: 0.15rem; }
+        .modal dt { padding-top: 0.6rem; }
+        .modal dt:first-of-type { padding-top: 0; }
+
+        .logout { padding: 0.6rem 1rem; min-height: 40px; }
+        .calendar-toolbar, .legend, .calendar-hint { padding-left: 0.65rem; padding-right: 0.65rem; }
+        #admin-calendar { padding: 0.65rem; }
+      }
+    </style>
+    <style is:global>
+      /* Inputs (also the flatpickr ones created by JS) */
+      .form-input { box-sizing: border-box; width: 100%; padding: 0.5rem 0.65rem; border: 1.5px solid #ddd; border-radius: 6px; font-family: inherit; font-size: 0.9rem; background: white; min-height: 38px; }
+      .form-input:focus { outline: none; border-color: var(--red); }
+      .detail-input { box-sizing: border-box; padding: 0.4rem 0.6rem; border: 1.5px solid #ddd; border-radius: 6px; font-family: inherit; font-size: 0.9rem; background: white; width: 100%; max-width: 100%; min-width: 0; }
+      .detail-input:focus { outline: none; border-color: var(--red); }
+      .detail-input:disabled { background: #f5f5f5; color: #1a1a1a; cursor: default; -webkit-text-fill-color: #1a1a1a; opacity: 1; }
+      /* flatpickr in site colours */
+      .flatpickr-day.selected, .flatpickr-day.selected:hover { background: #C8102E !important; border-color: #C8102E !important; }
+      .flatpickr-day.today { border-color: #C8102E; }
+      .flatpickr-time input:hover, .flatpickr-day:hover { background: #fdecef; }
+
+      @media (max-width: 760px) {
+        .bookings-table td { border: none !important; }
+      }
+
+      /* Button colors (also for JS-created elements) */
+      .btn-primary { background: #C8102E; color: white; }
+      .btn-approve { background: #22c55e; color: white; }
+      .btn-reject { background: #ef4444; color: white; }
+      .btn-danger { background: #dc2626; color: white; }
+      .btn-secondary { background: #e5e7eb; color: #1f2937; }
+      @media (hover: hover) {
+        .btn-primary:hover { background: #a00e25; }
+        .btn-secondary:hover { background: #d1d5db; }
+        .btn-approve:hover, .btn-reject:hover, .btn-danger:hover { filter: brightness(0.92); }
+      }
+      .btn-approve:active, .btn-reject:active, .btn-danger:active { filter: brightness(0.85); }
+
+      .modal-actions .btn {
+        font-size: 0.88rem !important;
+        padding: 0.45rem 1rem !important;
+        border: none !important;
+        border-radius: 6px !important;
+        cursor: pointer;
+        margin-right: 0;
+      }
+      @media (max-width: 760px) {
+        .modal-actions .btn {
+          width: 100% !important;
+          text-align: center !important;
+          padding: 0.75rem 1rem !important;
+          font-size: 0.92rem !important;
+          min-height: 44px !important;
+        }
+      }
+
+      .fc .fc-button-primary {
+        background: var(--red) !important; border-color: var(--red) !important;
+        -webkit-tap-highlight-color: transparent;
+        touch-action: manipulation;
+        transition: background 0.1s, transform 0.1s !important;
+      }
+      @media (hover: hover) {
+        .fc .fc-button-primary:hover { background: var(--red-dark) !important; border-color: var(--red-dark) !important; }
+      }
+      .fc .fc-button-primary:not(:disabled):active { background: var(--red-dark) !important; border-color: var(--red-dark) !important; transform: scale(0.96); }
+      .fc .fc-button-primary:not(:disabled).fc-button-active { background: #a00e25 !important; border-color: #a00e25 !important; }
+      .fc .fc-toolbar-title { font-size: 1rem !important; font-weight: 800 !important; }
+      .fc .fc-toolbar-chunk { display: flex !important; align-items: center; gap: 0.4rem; }
+      .fc .fc-col-header-cell-cushion, .fc .fc-daygrid-day-number { font-size: 0.8rem !important; font-weight: 700 !important; text-decoration: none !important; color: #444 !important; }
+      .fc .fc-timegrid-slot { height: 1.6rem !important; }
+      .fc .fc-timegrid-slot-label-cushion { font-size: 0.72rem !important; color: #999 !important; }
+      .fc .fc-day-today { background: rgba(200,16,46,.03) !important; }
+      .fc .fc-timegrid-event, .fc .fc-daygrid-event { border-radius: 3px !important; cursor: pointer !important; }
+      .fc .fc-event-title { font-size: 0.75rem; font-weight: 600; }
+      .fc .ev-rejected { opacity: 0.55; }
+      .fc .ev-rejected .fc-event-title { text-decoration: line-through; }
+      .fc .fc-day-past { background: repeating-linear-gradient(135deg, #f3f4f6, #f3f4f6 4px, #e9eaec 4px, #e9eaec 8px) !important; opacity: 0.7; }
+      @media (max-width: 760px) {
+        .fc .fc-toolbar { flex-wrap: wrap; gap: 0.5rem; }
+        .fc .fc-toolbar-chunk:first-child { width: 100%; }
+        .fc .fc-button { white-space: nowrap; }
+        .fc .fc-toolbar-title { font-size: 0.95rem !important; }
+        .fc .fc-col-header-cell-cushion { font-size: 0.68rem !important; }
+        .fc .fc-timegrid-slot-label-cushion { font-size: 0.62rem !important; }
+        .fc .fc-button { padding: 0.5rem 0.7rem !important; font-size: 0.82rem !important; min-height: 40px; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="header-left">
+        <img class="header-logo" src="/logo.png" alt="Basket Conselve" />
+        <h1>Admin — Prenotazioni Pulmini</h1>
+      </div>
+      <div class="header-right">
+        {showDevEmails && <a class="header-link" href="/dev/emails" target="_blank">Email (mock)</a>}
+        <form action="/api/admin/logout" method="post">
+          <button class="logout" type="submit">Esci</button>
+        </form>
+      </div>
+    </header>
+
+    <div class="container">
+
+      <!-- Pending requests -->
+      <div class="section-title">Richieste in sospeso ({pendingBookings.length})</div>
+      <div class="card">
+        <table class="bookings-table">
+          <thead>
+            <tr>
+              <th>Pulmino</th><th>Periodo</th><th>Richiedente</th><th>Contatti</th><th>Ricevuta</th><th>Azioni</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pendingBookings.map((b) => (
+              <tr>
+                <td data-label="Pulmino"><strong>{b.van_name}</strong></td>
+                <td data-label="Periodo">
+                  {formatDateTime(b.start_at)}<br />→ {formatDateTime(b.end_at)}<br />
+                  <span class="muted">{formatDuration(new Date(b.end_at).getTime() - new Date(b.start_at).getTime())}</span>
+                </td>
+                <td data-label="Richiedente"><strong>{b.company}</strong><br />{b.name}</td>
+                <td data-label="Contatti" style="word-break:break-all">
+                  <a href={`mailto:${b.email}`}>{b.email}</a><br />
+                  <a href={`tel:${b.phone}`}>{b.phone}</a>
+                </td>
+                <td data-label="Ricevuta"><span class="muted">{formatDateTime(b.created_at)}</span></td>
+                <td data-label="Azioni">
+                  <button class="btn btn-approve" data-action="approve" data-id={b.id}>Accetta</button>
+                  <button class="btn btn-reject" data-action="reject" data-id={b.id}>Rifiuta</button>
+                </td>
+              </tr>
+            ))}
+            {pendingBookings.length === 0 && (
+              <tr><td colspan="6" class="empty" style="text-align:center;color:#94a3b8;padding:1.5rem">Nessuna richiesta in sospeso</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Calendar -->
+      <div class="section-title">Calendario prenotazioni</div>
+      <div class="card">
+        <div class="calendar-toolbar" id="van-filter">
+          <span class="label">Pulmino</span>
+          <button class="chip active" data-van="">Tutti</button>
+          {vans.map((v) => <button class="chip" data-van={v.id}>{v.name}</button>)}
+        </div>
+        <div class="legend">
+          <div class="legend-item"><div class="dot" style="background:#eab308"></div> In attesa</div>
+          <div class="legend-item"><div class="dot" style="background:#dc2626"></div> Accettata</div>
+          <div class="legend-item"><div class="dot" style="background:#9ca3af"></div> Rifiutata</div>
+          <div class="legend-item"><div class="dot" style="background:#374151"></div> Bloccato</div>
+        </div>
+        <p class="calendar-hint">Clicca un evento per i dettagli. Trascina su uno spazio libero (anche su più giorni) per bloccare un periodo.</p>
+        <div id="admin-calendar"></div>
+      </div>
+
+      <!-- Season blocks -->
+      <div class="section-title">Blocchi stagionali (ricorrenti)</div>
+      <div class="card">
+        <div class="series-form">
+          <div class="half">
+            <label class="form-label" for="series-van">Pulmino</label>
+            <select id="series-van" class="form-input">
+              <option value="">Tutti i pulmini</option>
+              {vans.map((v) => <option value={v.id}>{v.name}</option>)}
+            </select>
+          </div>
+          <div class="half">
+            <label class="form-label" for="series-reason">Motivo / associazione</label>
+            <input id="series-reason" class="form-input" type="text" placeholder="es. Associazione X — stagione 2026/27" />
+          </div>
+          <div class="full">
+            <span class="form-label">Giorni della settimana</span>
+            <div class="weekdays">
+              {WEEK_ORDER.map((d) => (
+                <label class="weekday"><input type="checkbox" name="series-day" value={d} /><span>{DAY_SHORT[d]}</span></label>
+              ))}
+            </div>
+          </div>
+          <div>
+            <label class="form-label" for="series-start-hour">Dalle</label>
+            <select id="series-start-hour" class="form-input">
+              {hours.slice(0, 24).map((h) => <option value={h} selected={h === 17}>{pad(h)}:00</option>)}
+            </select>
+          </div>
+          <div>
+            <label class="form-label" for="series-end-hour">Alle</label>
+            <select id="series-end-hour" class="form-input">
+              {hours.slice(1).map((h) => <option value={h} selected={h === 20}>{pad(h)}:00</option>)}
+            </select>
+          </div>
+          <div>
+            <label class="form-label" for="series-from">Dal giorno</label>
+            <input id="series-from" class="form-input" type="text" placeholder="gg/mm/aaaa" />
+          </div>
+          <div>
+            <label class="form-label" for="series-to">Al giorno</label>
+            <input id="series-to" class="form-input" type="text" placeholder="gg/mm/aaaa" />
+          </div>
+          <div class="full" id="series-conflicts" style="display:none"></div>
+          <div class="full series-actions">
+            <span class="form-error" id="series-error"></span>
+            <button class="btn btn-primary" id="series-create">Crea blocco stagionale</button>
+          </div>
+        </div>
+        <table class="bookings-table">
+          <thead>
+            <tr><th>Pulmino</th><th>Quando</th><th>Periodo</th><th>Motivo</th><th>Azioni</th></tr>
+          </thead>
+          <tbody>
+            {blockSeries.map((s) => (
+              <tr>
+                <td data-label="Pulmino"><strong>{s.van_id ? vanName.get(s.van_id) : 'Tutti'}</strong></td>
+                <td data-label="Quando">
+                  {s.weekdays.split(',').map((d) => DAY_SHORT[Number(d)]).join(', ')} · {pad(s.start_hour)}:00–{pad(s.end_hour)}:00
+                </td>
+                <td data-label="Periodo">{fmtDate(s.valid_from)} → {fmtDate(s.valid_to)}<br /><span class="muted">{s.occurrences} occorrenze</span></td>
+                <td data-label="Motivo">{s.reason ?? '—'}</td>
+                <td data-label="Azioni"><button class="btn btn-danger" data-delete-series={s.id}>Elimina serie</button></td>
+              </tr>
+            ))}
+            {blockSeries.length === 0 && (
+              <tr><td colspan="5" class="empty" style="text-align:center;color:#94a3b8;padding:1.5rem">Nessun blocco stagionale</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Detail modal -->
+    <div class="modal-overlay" id="detail-modal">
+      <div class="modal">
+        <div class="modal-header">
+          <h2 id="detail-title">Dettagli prenotazione</h2>
+          <button class="modal-close" id="detail-close" aria-label="Chiudi">×</button>
+        </div>
+
+        <dl id="detail-booking-fields">
+          <dt>Pulmino</dt><dd id="detail-van">—</dd>
+          <dt>Società</dt><dd id="detail-company">—</dd>
+          <dt>Nome</dt><dd id="detail-name">—</dd>
+          <dt>Email</dt><dd id="detail-email" style="word-break:break-all">—</dd>
+          <dt>Telefono</dt><dd id="detail-phone">—</dd>
+          <dt>Stato</dt>
+          <dd>
+            <select id="detail-status" class="detail-input" disabled>
+              <option value="pending">⏳ In attesa</option>
+              <option value="approved">✅ Accettata</option>
+              <option value="rejected">❌ Rifiutata</option>
+            </select>
+          </dd>
+          <dt>Inizio</dt>
+          <dd><input type="text" id="detail-start" class="detail-input" disabled /></dd>
+          <dt>Fine</dt>
+          <dd><input type="text" id="detail-end" class="detail-input" disabled /></dd>
+          <dt>ID</dt><dd><code id="detail-id" style="font-size:0.8rem">—</code></dd>
+        </dl>
+
+        <dl id="detail-blocked-fields" style="display:none">
+          <dt>Pulmino</dt><dd id="detail-blocked-van">—</dd>
+          <dt>Periodo</dt><dd id="detail-blocked-range">—</dd>
+          <dt>Motivo</dt><dd id="detail-blocked-reason">—</dd>
+          <dt>Tipo</dt><dd id="detail-blocked-type">—</dd>
+        </dl>
+
+        <div id="detail-error" class="error-msg" style="display:none"></div>
+
+        <div id="detail-confirm-delete" style="display:none; margin-top:1.25rem; padding-top:1rem; border-top:1px solid #f0f0f0">
+          <p style="font-size:0.95rem; font-weight:600; margin-bottom:0.85rem" id="detail-confirm-text">Cancellare questa prenotazione?</p>
+          <div class="modal-actions" style="margin-top:0; padding-top:0; border-top:none">
+            <button class="btn btn-danger" id="detail-confirm-yes">Sì, cancella</button>
+            <button class="btn btn-secondary" id="detail-confirm-no">No</button>
+          </div>
+        </div>
+
+        <div class="modal-actions" id="detail-actions"></div>
+        <div class="modal-actions detail-edit-row" id="detail-edit-actions" style="display:none">
+          <div>
+            <label class="notify-label">
+              <input type="checkbox" id="detail-notify" checked disabled /> Invia email all'utente con le modifiche
+            </label>
+            <div class="notify-help" id="detail-notify-help">Se attivo, riceverà una email con il nuovo stato/periodo.</div>
+          </div>
+          <div class="edit-buttons">
+            <button class="btn btn-secondary" id="detail-cancel-edit">Annulla</button>
+            <button class="btn btn-primary" id="detail-save" disabled>Salva</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Block modal -->
+    <div class="modal-overlay" id="block-modal">
+      <div class="modal block-modal">
+        <div class="modal-header">
+          <h2>Blocca periodo</h2>
+          <button class="modal-close" id="block-close" aria-label="Chiudi">×</button>
+        </div>
+        <label class="form-label" for="block-van">Pulmino</label>
+        <select id="block-van" class="form-input">
+          <option value="">Tutti i pulmini</option>
+          {vans.map((v) => <option value={v.id}>{v.name}</option>)}
+        </select>
+        <label class="form-label" for="block-start">Dal</label>
+        <input type="text" id="block-start" class="form-input" />
+        <label class="form-label" for="block-end">Al</label>
+        <input type="text" id="block-end" class="form-input" />
+        <label class="form-label" for="block-reason">Motivo (opzionale)</label>
+        <input type="text" id="block-reason" class="form-input" placeholder="es. Manutenzione" />
+        <div id="block-error" class="error-msg" style="display:none"></div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="block-cancel-btn">Annulla</button>
+          <button class="btn btn-primary" id="block-confirm-btn">Blocca</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      import { Calendar } from '@fullcalendar/core';
+      import timeGridPlugin from '@fullcalendar/timegrid';
+      import dayGridPlugin from '@fullcalendar/daygrid';
+      import interactionPlugin from '@fullcalendar/interaction';
+      import luxonPlugin from '@fullcalendar/luxon3';
+      import flatpickr from 'flatpickr';
+      import { Italian } from 'flatpickr/dist/l10n/it.js';
+      import type { Instance } from 'flatpickr/dist/types/instance';
+      import 'flatpickr/dist/flatpickr.min.css';
+      import itLocale from '@fullcalendar/core/locales/it';
+      import { getRomeParts, romeDateTime, formatRange } from '../lib/time';
+
+      const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+
+      function openModal(id: string) {
+        $(id).classList.add('open');
+        document.body.classList.add('modal-open');
+      }
+      function closeModal(id: string) {
+        $(id).classList.remove('open');
+        document.body.classList.remove('modal-open');
+      }
+
+      async function apiPost(url: string) {
+        const res = await fetch(url, { method: 'POST' });
+        if (res.ok) window.location.reload();
+        else alert('Errore: ' + ((await res.json().catch(() => ({}))).error ?? res.status));
+      }
+
+      // ── Pending table actions ───────────────────────────────────────────
+      document.querySelectorAll<HTMLElement>('[data-action]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const { action, id } = btn.dataset;
+          (btn as HTMLButtonElement).disabled = true;
+          await apiPost(`/api/admin/bookings/${id}/${action}`);
+          (btn as HTMLButtonElement).disabled = false;
+        });
+      });
+
+      // ── Date pickers: values are Rome wall-clock "YYYY-MM-DDTHH:MM", shown as gg/mm/aaaa ──
+      const baseDateOpts = { locale: Italian, altInput: true, disableMobile: true };
+      const dateTimeOpts = {
+        ...baseDateOpts, enableTime: true, time_24hr: true, minuteIncrement: 60,
+        dateFormat: 'Y-m-d\\TH:i', altFormat: 'd/m/Y H:i',
+      };
+      const dateOpts = { ...baseDateOpts, dateFormat: 'Y-m-d', altFormat: 'd/m/Y' };
+      const pickers = {
+        detailStart: flatpickr($('detail-start'), dateTimeOpts),
+        detailEnd: flatpickr($('detail-end'), dateTimeOpts),
+        blockStart: flatpickr($('block-start'), dateTimeOpts),
+        blockEnd: flatpickr($('block-end'), dateTimeOpts),
+        seriesFrom: flatpickr($('series-from'), dateOpts),
+        seriesTo: flatpickr($('series-to'), dateOpts),
+      };
+      function setPickerDisabled(fp: Instance, disabled: boolean) {
+        fp.input.disabled = disabled;
+        if (fp.altInput) fp.altInput.disabled = disabled;
+      }
+
+      // ── Helpers ─────────────────────────────────────────────────────────
+      function toRomeInput(d: Date): string {
+        const p = getRomeParts(d);
+        const pad = (n: number) => String(n).padStart(2, '0');
+        return `${p.year}-${pad(p.month)}-${pad(p.day)}T${pad(p.hour)}:${pad(p.minute)}`;
+      }
+      function fromRomeInput(v: string): Date | null {
+        if (!v) return null;
+        const [date, time] = v.split('T');
+        const [h, m] = time.split(':').map(Number);
+        return romeDateTime(date, h, m);
+      }
+
+      // ── Block modal ─────────────────────────────────────────────────────
+      let currentVan = '';
+
+      function openBlockModal(start: Date, end: Date) {
+        $<HTMLSelectElement>('block-van').value = currentVan;
+        pickers.blockStart.setDate(toRomeInput(start), false);
+        pickers.blockEnd.setDate(toRomeInput(end), false);
+        $<HTMLInputElement>('block-reason').value = '';
+        $('block-error').style.display = 'none';
+        openModal('block-modal');
+      }
+
+      $('block-close').addEventListener('click', () => closeModal('block-modal'));
+      $('block-cancel-btn').addEventListener('click', () => closeModal('block-modal'));
+
+      $('block-confirm-btn').addEventListener('click', async () => {
+        const start = fromRomeInput($<HTMLInputElement>('block-start').value);
+        const end = fromRomeInput($<HTMLInputElement>('block-end').value);
+        const errEl = $('block-error');
+        if (!start || !end || end <= start) {
+          errEl.textContent = 'La fine deve essere successiva all\'inizio.';
+          errEl.style.display = 'block';
+          return;
+        }
+        const res = await fetch('/api/admin/blocked-slots', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            van: $<HTMLSelectElement>('block-van').value || null,
+            start_at: start.toISOString(),
+            end_at: end.toISOString(),
+            reason: $<HTMLInputElement>('block-reason').value.trim(),
+          }),
+        });
+        if (res.ok) {
+          closeModal('block-modal');
+          adminCalendar.refetchEvents();
+        } else {
+          errEl.textContent = (await res.json().catch(() => ({}))).error ?? 'Errore blocco periodo';
+          errEl.style.display = 'block';
+        }
+      });
+
+      // ── Detail modal ────────────────────────────────────────────────────
+      type DetailState = {
+        bookingId: string;
+        originalStatus: string;
+        originalStart: Date;
+        originalEnd: Date;
+      } | null;
+      let detail: DetailState = null;
+
+      const statusSel = $<HTMLSelectElement>('detail-status');
+      const startInp = $<HTMLInputElement>('detail-start');
+      const endInp = $<HTMLInputElement>('detail-end');
+
+      function setEditMode(editing: boolean) {
+        if (!detail) return;
+        statusSel.disabled = !editing;
+        setPickerDisabled(pickers.detailStart, !editing);
+        setPickerDisabled(pickers.detailEnd, !editing);
+        $('detail-actions').style.display = editing ? 'none' : 'flex';
+        $('detail-edit-actions').style.display = editing ? 'flex' : 'none';
+        $('detail-error').style.display = 'none';
+
+        if (editing) {
+          updateEditSummary();
+        } else {
+          statusSel.value = detail.originalStatus;
+          pickers.detailStart.setDate(toRomeInput(detail.originalStart), false);
+          pickers.detailEnd.setDate(toRomeInput(detail.originalEnd), false);
+          $<HTMLButtonElement>('detail-save').disabled = true;
+          $<HTMLInputElement>('detail-notify').disabled = true;
+        }
+      }
+
+      function readEdit() {
+        const newStart = fromRomeInput(startInp.value) ?? detail!.originalStart;
+        const newEnd = fromRomeInput(endInp.value) ?? detail!.originalEnd;
+        const statusChanged = statusSel.value !== detail!.originalStatus;
+        const timeChanged =
+          newStart.getTime() !== detail!.originalStart.getTime() ||
+          newEnd.getTime() !== detail!.originalEnd.getTime();
+        return { status: statusSel.value, newStart, newEnd, statusChanged, timeChanged };
+      }
+
+      function updateEditSummary() {
+        if (!detail) return;
+        const { status, newStart, newEnd, statusChanged, timeChanged } = readEdit();
+        const hasChanges = statusChanged || timeChanged;
+        const invalidRange = timeChanged && newEnd <= newStart;
+
+        const errEl = $('detail-error');
+        errEl.textContent = 'La fine deve essere successiva all\'inizio.';
+        errEl.style.display = invalidRange ? 'block' : 'none';
+
+        $<HTMLButtonElement>('detail-save').disabled = !hasChanges || invalidRange;
+        $<HTMLInputElement>('detail-notify').disabled = !hasChanges || invalidRange;
+
+        const helpEl = $('detail-notify-help');
+        if (!hasChanges) helpEl.textContent = 'Nessuna modifica da salvare.';
+        else if (statusChanged && status === 'approved') helpEl.textContent = 'Verrà inviata l\'email "Prenotazione confermata".';
+        else if (statusChanged && status === 'rejected') helpEl.textContent = 'Verrà inviata l\'email "Aggiornamento prenotazione" (pulmino non disponibile).';
+        else if (timeChanged && status !== 'rejected') helpEl.textContent = 'Verrà inviata l\'email "Periodo aggiornato" con vecchio e nuovo periodo.';
+        else helpEl.textContent = 'Nessuna email per il ritorno allo stato "In attesa".';
+      }
+
+      function actionButton(className: string, text: string, onClick: () => void): HTMLButtonElement {
+        const b = document.createElement('button');
+        b.className = `btn ${className}`;
+        b.textContent = text;
+        b.onclick = onClick;
+        return b;
+      }
+
+      function openDetailModal(ev: any) {
+        const p = ev.extendedProps;
+        const start: Date = ev.start;
+        const end: Date = ev.end;
+        const actions = $('detail-actions');
+        actions.innerHTML = '';
+        actions.style.display = 'flex';
+        $('detail-error').style.display = 'none';
+        $('detail-edit-actions').style.display = 'none';
+        $('detail-confirm-delete').style.display = 'none';
+
+        if (p.type === 'booking') {
+          $('detail-title').textContent = 'Dettagli prenotazione';
+          $('detail-booking-fields').style.display = '';
+          $('detail-blocked-fields').style.display = 'none';
+          $('detail-van').textContent = p.vanName;
+          $('detail-company').textContent = p.company;
+          $('detail-name').textContent = p.name;
+          $('detail-email').textContent = p.email;
+          $('detail-phone').textContent = p.phone;
+          $('detail-id').textContent = p.bookingId.slice(0, 8);
+
+          detail = { bookingId: p.bookingId, originalStatus: p.status, originalStart: start, originalEnd: end };
+          setEditMode(false);
+
+          if (p.status === 'pending') {
+            actions.append(
+              actionButton('btn-approve', 'Accetta', () => apiPost(`/api/admin/bookings/${p.bookingId}/approve`)),
+              actionButton('btn-reject', 'Rifiuta', () => apiPost(`/api/admin/bookings/${p.bookingId}/reject`)),
+            );
+          }
+          actions.append(actionButton('btn-secondary', 'Modifica', () => setEditMode(true)));
+          actions.append(actionButton('btn-danger', 'Elimina', () => {
+            $('detail-confirm-text').textContent = `Eliminare definitivamente la prenotazione di ${p.company}? Nessuna email verrà inviata.`;
+            actions.style.display = 'none';
+            $('detail-confirm-delete').style.display = '';
+          }));
+
+          $('detail-confirm-no').onclick = () => {
+            $('detail-confirm-delete').style.display = 'none';
+            actions.style.display = 'flex';
+          };
+          $('detail-confirm-yes').onclick = async () => {
+            const res = await fetch(`/api/admin/bookings/${p.bookingId}`, { method: 'DELETE' });
+            closeModal('detail-modal');
+            if (res.ok) window.location.reload();
+            else alert('Errore cancellazione');
+          };
+        } else {
+          detail = null;
+          $('detail-title').textContent = 'Dettagli blocco';
+          $('detail-booking-fields').style.display = 'none';
+          $('detail-blocked-fields').style.display = '';
+          $('detail-blocked-van').textContent = p.vanName;
+          $('detail-blocked-range').textContent = formatRange(start, end);
+          $('detail-blocked-reason').textContent = p.reason ?? '—';
+          $('detail-blocked-type').textContent = p.seriesId ? 'Blocco stagionale (ricorrente)' : 'Blocco singolo';
+
+          actions.append(actionButton('btn-secondary', p.seriesId ? 'Sblocca solo questo giorno' : 'Sblocca', async () => {
+            const res = await fetch(`/api/admin/blocked-slots/${p.blockId}`, { method: 'DELETE' });
+            closeModal('detail-modal');
+            if (res.ok) adminCalendar.refetchEvents();
+            else alert('Errore sblocco');
+          }));
+          if (p.seriesId) {
+            actions.append(actionButton('btn-danger', 'Elimina intera serie', () => deleteSeries(p.seriesId)));
+          }
+        }
+
+        openModal('detail-modal');
+      }
+
+      [statusSel, startInp, endInp].forEach((el) => el.addEventListener('change', updateEditSummary));
+      $('detail-cancel-edit').addEventListener('click', () => setEditMode(false));
+      $('detail-close').addEventListener('click', () => closeModal('detail-modal'));
+
+      $('detail-save').addEventListener('click', async () => {
+        if (!detail) return;
+        const { status, newStart, newEnd, statusChanged, timeChanged } = readEdit();
+        if (!statusChanged && !timeChanged) return setEditMode(false);
+
+        const body: Record<string, unknown> = { notify: $<HTMLInputElement>('detail-notify').checked };
+        if (statusChanged) body.status = status;
+        if (timeChanged) {
+          body.start_at = newStart.toISOString();
+          body.end_at = newEnd.toISOString();
+        }
+
+        const saveBtn = $<HTMLButtonElement>('detail-save');
+        saveBtn.disabled = true; saveBtn.textContent = 'Salvataggio…';
+        const res = await fetch(`/api/admin/bookings/${detail.bookingId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        saveBtn.disabled = false; saveBtn.textContent = 'Salva';
+
+        if (res.ok) {
+          window.location.reload();
+        } else {
+          const errEl = $('detail-error');
+          errEl.textContent = (await res.json().catch(() => ({}))).error ?? 'Errore durante il salvataggio.';
+          errEl.style.display = 'block';
+        }
+      });
+
+      // ── Calendar ────────────────────────────────────────────────────────
+      const isMobile = () => window.innerWidth < 760;
+      const weekView = () => (isMobile() ? 'timeGrid3' : 'timeGrid7');
+
+      const adminCalendar = new Calendar($('admin-calendar'), {
+        plugins: [timeGridPlugin, dayGridPlugin, interactionPlugin, luxonPlugin],
+        timeZone: 'Europe/Rome', // always show Italian time, whatever the visitor's device zone
+        locale: itLocale,
+        initialView: weekView(),
+        views: {
+          timeGrid7: { type: 'timeGrid', duration: { days: 7 } },
+          timeGrid3: { type: 'timeGrid', duration: { days: 3 } },
+        },
+        windowResize: () => {
+          const target = weekView();
+          if (adminCalendar.view.type !== 'dayGridMonth' && adminCalendar.view.type !== target) adminCalendar.changeView(target);
+        },
+        customButtons: {
+          weekBtn: { text: 'Settimana', click: () => adminCalendar.changeView(weekView()) },
+        },
+        buttonText: { today: 'Oggi', month: 'Mese' },
+        headerToolbar: { left: 'title', center: '', right: 'weekBtn,dayGridMonth today prev,next' },
+        nowIndicator: true,
+        slotDuration: '01:00:00',
+        slotMinTime: '00:00:00',
+        slotMaxTime: '24:00:00',
+        scrollTime: '07:00:00',
+        slotLabelFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
+        eventTimeFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
+        allDaySlot: false,
+        height: 620,
+        dayMaxEvents: 4,
+        selectable: true,
+        selectAllow: (info) => info.start >= new Date(),
+        select: (info) => {
+          adminCalendar.unselect();
+          // Month view selects whole days: keep them as full-day blocks
+          openBlockModal(info.start, info.end);
+        },
+        eventClick: (info) => openDetailModal(info.event),
+        events: async (info) => {
+          const from = info.startStr.slice(0, 10);
+          const to = info.endStr.slice(0, 10);
+          const res = await fetch(`/api/admin/calendar-events?van=${currentVan}&from=${from}&to=${to}`);
+          return res.ok ? res.json() : [];
+        },
+      });
+      adminCalendar.render();
+
+      document.querySelectorAll<HTMLButtonElement>('#van-filter .chip').forEach((chip) => {
+        chip.addEventListener('click', () => {
+          document.querySelectorAll('#van-filter .chip').forEach((c) => c.classList.remove('active'));
+          chip.classList.add('active');
+          currentVan = chip.dataset.van ?? '';
+          adminCalendar.refetchEvents();
+        });
+      });
+
+      // ── Season blocks ───────────────────────────────────────────────────
+      async function deleteSeries(id: string) {
+        if (!confirm('Eliminare tutta la serie e tutte le sue occorrenze?')) return;
+        const res = await fetch(`/api/admin/block-series/${id}`, { method: 'DELETE' });
+        if (res.ok) window.location.reload();
+        else alert('Errore eliminazione serie');
+      }
+
+      document.querySelectorAll<HTMLElement>('[data-delete-series]').forEach((btn) => {
+        btn.addEventListener('click', () => deleteSeries(btn.dataset.deleteSeries!));
+      });
+
+      async function createSeries(force: boolean) {
+        const errEl = $('series-error');
+        const conflictsEl = $('series-conflicts');
+        errEl.textContent = '';
+        const weekdays = Array.from(document.querySelectorAll<HTMLInputElement>('input[name="series-day"]:checked')).map((i) => Number(i.value));
+        const body = {
+          van: $<HTMLSelectElement>('series-van').value || null,
+          weekdays,
+          start_hour: Number($<HTMLSelectElement>('series-start-hour').value),
+          end_hour: Number($<HTMLSelectElement>('series-end-hour').value),
+          valid_from: $<HTMLInputElement>('series-from').value,
+          valid_to: $<HTMLInputElement>('series-to').value,
+          reason: $<HTMLInputElement>('series-reason').value.trim(),
+          force,
+        };
+        if (weekdays.length === 0) { errEl.textContent = 'Seleziona almeno un giorno.'; return; }
+        if (!body.valid_from || !body.valid_to) { errEl.textContent = 'Indica il periodo di validità.'; return; }
+
+        const btn = $<HTMLButtonElement>('series-create');
+        btn.disabled = true;
+        const res = await fetch('/api/admin/block-series', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        btn.disabled = false;
+        const data = await res.json().catch(() => ({}));
+
+        if (res.ok) {
+          window.location.reload();
+        } else if (res.status === 409 && data.conflicts) {
+          conflictsEl.innerHTML = '';
+          const box = document.createElement('div');
+          box.className = 'conflicts';
+          const title = document.createElement('strong');
+          title.textContent = `⚠️ Il blocco si sovrappone a ${data.conflicts.length} prenotazioni esistenti:`;
+          const list = document.createElement('ul');
+          for (const c of data.conflicts) {
+            const li = document.createElement('li');
+            li.textContent = `${c.van_name} · ${c.company} (${c.name}) · ${formatRange(new Date(c.start_at), new Date(c.end_at))} · ${c.status === 'approved' ? 'accettata' : 'in attesa'}`;
+            list.appendChild(li);
+          }
+          const forceBtn = actionButton('btn-danger', 'Crea comunque', () => createSeries(true));
+          box.append(title, list, forceBtn);
+          conflictsEl.appendChild(box);
+          conflictsEl.style.display = '';
+        } else {
+          errEl.textContent = data.error ?? 'Errore creazione blocco';
+        }
+      }
+
+      $('series-create').addEventListener('click', () => createSeries(false));
+      ['series-van', 'series-start-hour', 'series-end-hour', 'series-from', 'series-to'].forEach((id) => {
+        $(id).addEventListener('change', () => ($('series-conflicts').style.display = 'none'));
+      });
+    </script>
+  </body>
+</html>

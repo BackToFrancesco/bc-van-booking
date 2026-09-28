@@ -1,0 +1,85 @@
+---
+import PublicLayout from '../layouts/PublicLayout.astro';
+import { listVans } from '../lib/repo';
+import { MIN_ADVANCE_DAYS, MIN_BOOKING_HOURS } from '../lib/config';
+
+const vans = await listVans();
+---
+
+<PublicLayout
+  title="Prenotazione Pulmini — Basket Conselve"
+  heroTitle="Pulmini • Basket Conselve"
+  heroSubtitle="Scegli il pulmino e richiedi la prenotazione"
+>
+  <style>
+    .vans {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+    }
+    .van-card {
+      background: white;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.08);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .van-photo {
+      height: 150px;
+      background: linear-gradient(135deg, #2a2a2a, #4a0d18);
+      display: flex; align-items: center; justify-content: center;
+      color: white;
+    }
+    .van-photo img { width: 100%; height: 100%; object-fit: cover; }
+    .van-photo svg { width: 72px; height: 72px; opacity: 0.9; }
+    .van-body { padding: 1rem 1.1rem 1.2rem; display: flex; flex-direction: column; gap: 0.35rem; flex: 1; }
+    .van-name { font-size: 1.15rem; font-weight: 800; }
+    .van-meta { font-size: 0.85rem; color: #666; }
+    .van-card .btn { margin-top: auto; padding: 0.8rem; }
+    .section-title {
+      font-size: 1rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;
+      color: var(--red); margin-bottom: 0.75rem; padding-left: 0.5rem; border-left: 3px solid var(--red);
+    }
+    @media (max-width: 760px) {
+      .vans { grid-template-columns: 1fr; }
+      .van-photo { height: 120px; }
+      .van-card .btn { min-height: 48px; font-size: 1rem; }
+    }
+  </style>
+
+  <div class="info-box">
+    <strong>ℹ️ Come funziona</strong>
+    <ul>
+      <li>Scegli il pulmino, poi indica data e ora di ritiro e di riconsegna</li>
+      <li>Le richieste vanno inviate con almeno <strong>{MIN_ADVANCE_DAYS} giorni</strong> di anticipo</li>
+      <li>Durata minima {MIN_BOOKING_HOURS} ora, puoi prenotare anche per più giorni</li>
+      <li>Riceverai un'email di conferma quando la richiesta sarà accettata</li>
+    </ul>
+  </div>
+
+  <div class="section-title">Scegli il pulmino</div>
+  <div class="vans">
+    {vans.map((van) => (
+      <div class="van-card">
+        <div class="van-photo">
+          {van.photo ? (
+            <img src={van.photo} alt={van.name} />
+          ) : (
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M3 17V7a2 2 0 0 1 2-2h10l5 5v7h-2" />
+              <path d="M3 17h2" /><path d="M9 17h6" />
+              <circle cx="7" cy="17" r="2" /><circle cx="17" cy="17" r="2" />
+              <path d="M15 5v5h5" /><path d="M3 10h12" />
+            </svg>
+          )}
+        </div>
+        <div class="van-body">
+          <div class="van-name">{van.name}</div>
+          <div class="van-meta">{van.seats} posti{van.description ? ` · ${van.description}` : ''}</div>
+          <a class="btn btn-primary" href={`/pulmini/${van.id}`}>Prenota →</a>
+        </div>
+      </div>
+    ))}
+  </div>
+</PublicLayout>

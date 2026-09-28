@@ -1,0 +1,702 @@
+---
+import PublicLayout from '../../layouts/PublicLayout.astro';
+import { getVan } from '../../lib/repo';
+import { MIN_ADVANCE_DAYS, MIN_BOOKING_HOURS } from '../../lib/config';
+
+const van = await getVan(Astro.params.slug!);
+if (!van) return new Response('Pulmino non trovato', { status: 404 });
+
+const hours = Array.from({ length: 24 }, (_, i) => i);
+---
+
+<PublicLayout
+  title={`Prenota ${van.name} — Basket Conselve`}
+  heroTitle={`${van.name} • Basket Conselve`}
+  heroSubtitle="Scegli le date, invia la richiesta"
+>
+  <style>
+    .back-link { display: inline-block; margin-bottom: 1rem; color: #444; font-size: 0.9rem; font-weight: 600; text-decoration: none; }
+    .back-link:hover { color: var(--red); }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.85rem;
+      margin-bottom: 1.5rem;
+    }
+    .step {
+      background: white;
+      border-radius: 10px;
+      padding: 1rem 0.85rem;
+      text-align: center;
+      box-shadow: 0 2px 6px rgba(0,0,0,.05);
+    }
+    .step-num {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      background: var(--red);
+      color: white;
+      font-weight: 800;
+      font-size: 0.95rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 0.5rem;
+    }
+    .step-title { font-weight: 700; font-size: 0.95rem; color: #1a1a1a; margin-bottom: 0.25rem; }
+    .step-desc { font-size: 0.8rem; color: #666; line-height: 1.4; }
+
+    /* Period form */
+    .period-card {
+      background: white; border-radius: 10px; padding: 1.25rem;
+      box-shadow: 0 2px 8px rgba(0,0,0,.08); margin-bottom: 1.25rem;
+    }
+    .period-card h2 { font-size: 1rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; color: var(--red); margin-bottom: 1rem; }
+    .period-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem 1.5rem; }
+    .period-field label { display: block; margin-bottom: 0.3rem; font-size: 0.8rem; font-weight: 700; color: #444; text-transform: uppercase; letter-spacing: 0.03em; }
+    .period-inputs { display: flex; gap: 0.5rem; }
+    .period-inputs select {
+      padding: 0.55rem 0.7rem; border: 1.5px solid #ddd; border-radius: 7px;
+      font-size: 1rem; font-family: inherit; background: white; min-height: 44px;
+    }
+    .period-inputs select { width: 6.2rem; }
+    .period-inputs select:focus { outline: none; border-color: var(--red); }
+
+    .range-status {
+      margin-top: 1rem; padding: 0.65rem 0.9rem; border-radius: 6px;
+      font-size: 0.92rem; font-weight: 600; border-left: 4px solid #d1d5db; background: #f7f7f7; color: #555;
+    }
+    .range-status.ok { border-left-color: #16a34a; background: #f0fdf4; color: #166534; }
+    .range-status.error { border-left-color: #dc2626; background: #fef2f2; color: #991b1b; }
+    .period-actions { display: flex; justify-content: flex-end; margin-top: 1rem; }
+    .period-actions .btn { padding: 0.8rem 1.6rem; }
+
+    .legend { display: flex; gap: 1rem; margin-bottom: 0.6rem; flex-wrap: wrap; }
+    .legend-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 500; }
+    .dot { width: 12px; height: 12px; border-radius: 50%; }
+    .calendar-hint { font-size: 0.82rem; color: #666; margin-bottom: 0.75rem; }
+    #calendar { background: white; border-radius: 10px; padding: 1.25rem; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+
+    /* Modal */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.55); z-index: 100;
+      align-items: flex-start; justify-content: center;
+      overflow-y: auto;
+      padding: 1rem;
+      -webkit-overflow-scrolling: touch;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: white; border-radius: 12px; padding: 2rem;
+      width: 100%; max-width: 440px; position: relative;
+      box-shadow: 0 8px 32px rgba(0,0,0,.18);
+      margin: auto 0;
+    }
+    .modal-header { border-bottom: 3px solid var(--red); padding-bottom: 0.75rem; margin-bottom: 1.25rem; }
+    .modal-header h2 { font-size: 1.3rem; font-weight: 800; color: var(--red); }
+    .modal label { display: block; margin-bottom: 0.3rem; font-size: 0.85rem; font-weight: 600; color: #444; text-transform: uppercase; letter-spacing: 0.03em; }
+    .modal input { width: 100%; padding: 0.55rem 0.8rem; border: 1.5px solid #ddd; border-radius: 7px; margin-bottom: 1rem; font-size: 1rem; font-family: inherit; transition: border-color 0.15s; }
+    .modal input:focus { outline: none; border-color: var(--red); }
+    .modal input.error-field { border-color: #dc2626; margin-bottom: 0.25rem; }
+    .field-error { color: #dc2626; font-size: 0.8rem; margin-bottom: 0.75rem; display: none; }
+    .modal-actions { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1rem; }
+    .slot-info { background: #fff5f5; border-left: 3px solid var(--red); border-radius: 4px; padding: 0.5rem 0.75rem; margin-bottom: 1.25rem; font-size: 0.9rem; font-weight: 600; color: var(--red); line-height: 1.5; }
+    .error-msg { color: #dc2626; font-size: 0.85rem; margin-bottom: 0.5rem; }
+    .success-msg { color: #1a1a1a; font-size: 0.95rem; line-height: 1.55; margin-top: 0.5rem; }
+    .success-msg h3 { font-size: 1.15rem; font-weight: 800; color: #16a34a; margin-bottom: 0.75rem; }
+    .success-msg p { margin-bottom: 0.7rem; }
+    .success-msg p:last-of-type { margin-bottom: 1rem; }
+    .success-msg .spam-note {
+      background: #fff3cd; border-left: 3px solid #f59e0b;
+      padding: 0.6rem 0.85rem; border-radius: 4px;
+      font-size: 0.9rem;
+    }
+    .success-msg .ok-btn { width: 100%; margin-top: 0.5rem; }
+    .iti { width: 100%; margin-bottom: 1rem; display: block; }
+    .iti__tel-input { width: 100%; }
+
+    @media (max-width: 640px) {
+      .steps { grid-template-columns: repeat(2, 1fr); gap: 0.6rem; }
+      .step { padding: 0.75rem 0.6rem; }
+      .step-num { width: 28px; height: 28px; font-size: 0.85rem; }
+      .step-title { font-size: 0.88rem; }
+      .step-desc { font-size: 0.75rem; }
+      .period-grid { grid-template-columns: 1fr; }
+      .period-actions .btn { width: 100%; min-height: 50px; font-size: 1rem; }
+      .legend { gap: 0.6rem; }
+      .legend-item { font-size: 0.78rem; }
+      #calendar { padding: 0.75rem; }
+      .modal { padding: 1.25rem; margin: 0.75rem; max-width: 100%; }
+      .modal-actions { flex-direction: column-reverse; gap: 0.5rem; }
+      .modal-actions .btn { width: 100%; padding: 0.95rem; font-size: 1rem; min-height: 48px; }
+    }
+  </style>
+  <style is:global>
+    /* Date inputs are created by flatpickr (JS), so their styles must be global */
+    .period-inputs input {
+      box-sizing: border-box; flex: 1; min-width: 0; width: 100%;
+      padding: 0.55rem 0.7rem; border: 1.5px solid #ddd; border-radius: 7px;
+      font-size: 1rem; font-family: inherit; background: white; min-height: 44px; color: #1a1a1a;
+      cursor: pointer;
+    }
+    .period-inputs input:focus { outline: none; border-color: var(--red); }
+    /* flatpickr in site colours */
+    .flatpickr-day.selected, .flatpickr-day.selected:hover { background: #C8102E !important; border-color: #C8102E !important; }
+    .flatpickr-day.today { border-color: #C8102E; }
+    .flatpickr-time input:hover, .flatpickr-day:hover { background: #fdecef; }
+    .alternatives { margin-top: 0.75rem; padding-top: 0.65rem; border-top: 1px solid #fecaca; color: #1a1a1a; font-weight: 500; }
+    .alternatives-title { font-weight: 700; margin-bottom: 0.45rem; }
+    .alternative {
+      display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;
+      background: white; border: 1.5px solid #bbf7d0; border-radius: 7px;
+      padding: 0.55rem 0.8rem; margin-top: 0.4rem; color: #1a1a1a; text-decoration: none;
+      transition: border-color 0.1s, transform 0.1s;
+    }
+    .alternative:hover { border-color: #16a34a; }
+    .alternative:active { transform: scale(0.99); }
+    .alternative-cta { color: #16a34a; font-weight: 700; white-space: nowrap; }
+    .range-summary { display: block; font-weight: 500; color: #333; margin-top: 0.2rem; font-size: 0.88rem; }
+    .fc .fc-button-primary {
+      background: var(--red) !important; border-color: var(--red) !important;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+      transition: background 0.1s, transform 0.1s !important;
+    }
+    @media (hover: hover) {
+      .fc .fc-button-primary:hover { background: var(--red-dark) !important; border-color: var(--red-dark) !important; }
+    }
+    .fc .fc-button-primary:not(:disabled):active { background: var(--red-dark) !important; border-color: var(--red-dark) !important; transform: scale(0.96); }
+    .fc .fc-button-primary:not(:disabled).fc-button-active { background: var(--red-dark) !important; border-color: var(--red-dark) !important; }
+
+    .fc .fc-toolbar { margin-bottom: 1.25rem; }
+    .fc .fc-toolbar-chunk { display: flex !important; flex-direction: row !important; align-items: center !important; gap: 0.4rem; }
+    .fc .fc-toolbar-title { font-size: 1.1rem !important; font-weight: 800 !important; color: #1a1a1a; letter-spacing: -0.02em; }
+    .fc .fc-col-header-cell { background: #f9f9f9; border-color: #e8e8e8 !important; padding: 0.5rem 0 !important; }
+    .fc .fc-col-header-cell-cushion { color: #444 !important; font-weight: 700 !important; font-size: 0.82rem !important; text-transform: uppercase; letter-spacing: 0.05em; text-decoration: none !important; }
+    .fc .fc-daygrid-day-number { color: #444 !important; text-decoration: none !important; font-weight: 600; font-size: 0.85rem; }
+    .fc .fc-timegrid-slot-label-cushion { font-size: 0.75rem !important; font-weight: 700 !important; color: #888 !important; }
+    .fc .fc-timegrid-slot { border-color: #f0f0f0 !important; height: 1.9rem !important; }
+    .fc td, .fc th { border-color: #e8e8e8 !important; }
+    .fc .fc-day-today { background: rgba(200,16,46,.04) !important; }
+    .fc .fc-timegrid-event, .fc .fc-daygrid-event { border-radius: 4px !important; cursor: default !important; }
+    .fc .fc-event-title { font-weight: 600; font-size: 0.78rem; }
+    .fc .fc-bg-event.bg-not-bookable { background: repeating-linear-gradient(135deg, #e5e7eb, #e5e7eb 4px, #f3f4f6 4px, #f3f4f6 8px) !important; opacity: 0.8 !important; }
+    .fc .fc-bg-event.bg-selection { background: #1d4ed8 !important; opacity: 0.35 !important; }
+    .fc .fc-timegrid-col, .fc .fc-daygrid-day { cursor: pointer; }
+    @media (max-width: 640px) {
+      .fc .fc-button { white-space: nowrap; }
+      .fc .fc-toolbar-title { font-size: 0.95rem !important; }
+      .fc .fc-col-header-cell-cushion { font-size: 0.68rem !important; }
+      .fc .fc-timegrid-slot-label-cushion { font-size: 0.62rem !important; }
+      .fc .fc-button { padding: 0.5rem 0.6rem !important; font-size: 0.82rem !important; min-height: 40px; }
+      .fc .fc-toolbar-chunk > * { margin-left: 0 !important; }
+    }
+  </style>
+
+  <a class="back-link" href="/">← Tutti i pulmini</a>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-title">Scegli le date</div>
+      <div class="step-desc">Indica ritiro e riconsegna del pulmino</div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-title">Invia la richiesta</div>
+      <div class="step-desc">Compila il form con i tuoi dati</div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-title">Attendi conferma</div>
+      <div class="step-desc">Riceverai un'email quando la richiesta sarà accettata</div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-title">Buon viaggio</div>
+      <div class="step-desc">Ritira il pulmino all'orario concordato</div>
+    </div>
+  </div>
+
+  <div class="info-box">
+    <strong>⚠️ Importante</strong>
+    <ul>
+      <li>Le richieste vanno inviate con almeno <strong>{MIN_ADVANCE_DAYS} giorni</strong> di anticipo</li>
+      <li>Durata minima {MIN_BOOKING_HOURS} ora, a ore intere; puoi prenotare anche per più giorni</li>
+      <li>{van.name}: {van.seats} posti{van.description ? ` · ${van.description}` : ''}</li>
+    </ul>
+  </div>
+
+  <div class="period-card" id="period-card" data-van={van.id} data-van-name={van.name}>
+    <h2>Periodo di prenotazione</h2>
+    <div class="period-grid">
+      <div class="period-field">
+        <label for="start-date">Ritiro (dal)</label>
+        <div class="period-inputs">
+          <input type="text" id="start-date" />
+          <select id="start-hour" aria-label="Ora di ritiro">
+            {hours.map((h) => <option value={h} selected={h === 9}>{String(h).padStart(2, '0')}:00</option>)}
+          </select>
+        </div>
+      </div>
+      <div class="period-field">
+        <label for="end-date">Riconsegna (al)</label>
+        <div class="period-inputs">
+          <input type="text" id="end-date" />
+          <select id="end-hour" aria-label="Ora di riconsegna">
+            {hours.map((h) => <option value={h} selected={h === 18}>{String(h).padStart(2, '0')}:00</option>)}
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="range-status" id="range-status">Scegli data e ora di ritiro e di riconsegna.</div>
+    <div class="period-actions">
+      <button class="btn btn-primary" id="book-btn" disabled>Verifica e prenota →</button>
+    </div>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item"><div class="dot" style="background:#1d4ed8"></div> Il tuo periodo</div>
+    <div class="legend-item"><div class="dot" style="background:#eab308"></div> In attesa di conferma</div>
+    <div class="legend-item"><div class="dot" style="background:#dc2626"></div> Prenotato</div>
+    <div class="legend-item"><div class="dot" style="background:#374151"></div> Non disponibile</div>
+  </div>
+  <p class="calendar-hint">Suggerimento: tocca il calendario per scegliere l'ora di ritiro, poi tocca di nuovo per l'ora di riconsegna. Usa le frecce per cambiare settimana.</p>
+  <div id="calendar"></div>
+
+  <div class="modal-overlay" id="modal-overlay">
+    <div class="modal">
+      <div class="modal-header"><h2>Richiedi prenotazione</h2></div>
+      <div class="slot-info" id="modal-slot-info"></div>
+      <div class="error-msg" id="modal-error" style="display:none"></div>
+      <div id="modal-form">
+        <label for="inp-name">Nome e cognome *</label>
+        <input id="inp-name" type="text" autocomplete="name" required />
+
+        <label for="inp-company">Società *</label>
+        <input id="inp-company" type="text" autocomplete="organization" required />
+
+        <label for="inp-email">Email *</label>
+        <input id="inp-email" type="email" autocomplete="email" required />
+        <div class="field-error" id="email-error">Inserisci un'email valida.</div>
+
+        <label for="inp-email-confirm">Conferma email *</label>
+        <input id="inp-email-confirm" type="email" required />
+        <div class="field-error" id="email-confirm-error">Le email non corrispondono.</div>
+
+        <label for="inp-phone">Telefono *</label>
+        <input id="inp-phone" type="tel" placeholder="333 123 4567" required />
+
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="modal-cancel">Annulla</button>
+          <button class="btn btn-primary" id="modal-submit">Invia richiesta</button>
+        </div>
+      </div>
+      <div class="success-msg" id="modal-success" style="display:none">
+        <h3>Richiesta inviata!</h3>
+        <p>Abbiamo mandato un'email di conferma a <strong id="success-email"></strong>.</p>
+        <p class="spam-note">
+          Se non la trovi entro pochi minuti, controlla la cartella <strong>spam</strong>.
+          Se è lì, segnala come <strong>"Non è spam"</strong> per ricevere correttamente
+          le prossime comunicazioni.
+        </p>
+        <p>Riceverai un'altra email quando confermeremo la disponibilità del pulmino.</p>
+        <button class="btn btn-primary ok-btn" id="modal-success-ok">Ho capito</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    import { Calendar, type EventInput } from '@fullcalendar/core';
+    import timeGridPlugin from '@fullcalendar/timegrid';
+    import interactionPlugin from '@fullcalendar/interaction';
+    import luxonPlugin from '@fullcalendar/luxon3';
+    import itLocale from '@fullcalendar/core/locales/it';
+    import flatpickr from 'flatpickr';
+    import { Italian } from 'flatpickr/dist/l10n/it.js';
+    import 'flatpickr/dist/flatpickr.min.css';
+    import intlTelInput from 'intl-tel-input';
+    import 'intl-tel-input/dist/css/intlTelInput.css';
+
+    import { BOOKING_HORIZON_MS } from '../../lib/config';
+    import { validateBookingRange, rangesOverlap, earliestBookableStart, type Range } from '../../lib/booking-rules';
+    import { romeDateTime, romeDateStr, addDays, formatRange, formatDuration, getRomeParts } from '../../lib/time';
+
+    const card = document.getElementById('period-card')!;
+    const VAN_ID = card.dataset.van!;
+
+    const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
+    const startDateInp = $<HTMLInputElement>('start-date');
+    const startHourSel = $<HTMLSelectElement>('start-hour');
+    const endDateInp = $<HTMLInputElement>('end-date');
+    const endHourSel = $<HTMLSelectElement>('end-hour');
+    const statusEl = $('range-status');
+    const bookBtn = $<HTMLButtonElement>('book-btn');
+
+    const earliest = earliestBookableStart(new Date());
+    const earliestStr = romeDateStr(earliest);
+    const horizonStr = romeDateStr(new Date(Date.now() + BOOKING_HORIZON_MS));
+
+    // Date pickers: the input keeps "YYYY-MM-DD", the user sees "gg/mm/aaaa" on every device
+    const pickerOptions = {
+      locale: Italian,
+      dateFormat: 'Y-m-d',
+      altInput: true,
+      altFormat: 'd/m/Y',
+      allowInput: false,
+      disableMobile: true,
+      minDate: earliestStr,
+      maxDate: horizonStr,
+    };
+    const startPicker = flatpickr(startDateInp, { ...pickerOptions });
+    const endPicker = flatpickr(endDateInp, { ...pickerOptions });
+    startPicker.altInput!.placeholder = 'gg/mm/aaaa';
+    endPicker.altInput!.placeholder = 'gg/mm/aaaa';
+
+    function setStartDate(v: string) { startPicker.setDate(v, false); }
+    function setEndDate(v: string) { endPicker.setDate(v, false); }
+
+    // ── Availability data (single fetch for the whole horizon) ─────────────
+    type SlotData = {
+      bookings: { start_at: string; end_at: string; status: string }[];
+      blocked: { start_at: string; end_at: string; reason: string | null }[];
+    };
+    let slotData: SlotData = { bookings: [], blocked: [] };
+    let loadedAt = 0;
+    const CACHE_TTL_MS = 5 * 60 * 1000;
+
+    async function loadSlots(): Promise<void> {
+      const from = romeDateStr(new Date());
+      const res = await fetch(`/api/slots?van=${encodeURIComponent(VAN_ID)}&from=${from}&to=${horizonStr}`);
+      if (res.ok) {
+        slotData = await res.json();
+        loadedAt = Date.now();
+      }
+    }
+
+    function busyRanges(): (Range & { kind: 'pending' | 'approved' | 'blocked' })[] {
+      return [
+        ...slotData.bookings.map((b) => ({
+          start: new Date(b.start_at), end: new Date(b.end_at),
+          kind: (b.status === 'approved' ? 'approved' : 'pending') as 'pending' | 'approved',
+        })),
+        ...slotData.blocked.map((b) => ({ start: new Date(b.start_at), end: new Date(b.end_at), kind: 'blocked' as const })),
+      ];
+    }
+
+    // ── Selected period ────────────────────────────────────────────────────
+    function readRange(): Range | null {
+      if (!startDateInp.value || !endDateInp.value) return null;
+      return {
+        start: romeDateTime(startDateInp.value, Number(startHourSel.value)),
+        end: romeDateTime(endDateInp.value, Number(endHourSel.value)),
+      };
+    }
+
+    let validRange: Range | null = null;
+
+    function setStatus(kind: '' | 'ok' | 'error', title: string, summary = '') {
+      statusEl.className = `range-status ${kind}`;
+      statusEl.textContent = title;
+      if (summary) {
+        const s = document.createElement('span');
+        s.className = 'range-summary';
+        s.textContent = summary;
+        statusEl.appendChild(s);
+      }
+    }
+
+    // When this van is busy, suggest the other vans that are free for the same period
+    let alternativesToken = 0;
+    async function showAlternatives(range: Range) {
+      const token = ++alternativesToken;
+      const params = new URLSearchParams({ start: range.start.toISOString(), end: range.end.toISOString(), exclude: VAN_ID });
+      const res = await fetch(`/api/availability?${params}`).catch(() => null);
+      if (!res?.ok || token !== alternativesToken) return;
+      const { free } = (await res.json()) as { free: { id: string; name: string; seats: number }[] };
+
+      const box = document.createElement('div');
+      box.className = 'alternatives';
+      if (free.length === 0) {
+        box.textContent = 'Purtroppo in questo periodo non ci sono altri pulmini liberi.';
+      } else {
+        const title = document.createElement('div');
+        title.className = 'alternatives-title';
+        title.textContent = free.length === 1
+          ? '👉 In questo periodo è libero un altro pulmino:'
+          : '👉 In questo periodo sono liberi altri pulmini:';
+        box.appendChild(title);
+        for (const van of free) {
+          const link = document.createElement('a');
+          link.className = 'alternative';
+          link.href = `/pulmini/${van.id}?${new URLSearchParams({ start: range.start.toISOString(), end: range.end.toISOString() })}`;
+          const label = document.createElement('span');
+          label.innerHTML = `<strong></strong> · ${van.seats} posti`;
+          label.querySelector('strong')!.textContent = van.name;
+          const cta = document.createElement('span');
+          cta.className = 'alternative-cta';
+          cta.textContent = 'Prenota questo →';
+          link.append(label, cta);
+          box.appendChild(link);
+        }
+      }
+      statusEl.appendChild(box);
+    }
+
+    function evaluate() {
+      validRange = null;
+      alternativesToken++; // drop any in-flight suggestion for a previous period
+      endPicker.set('minDate', startDateInp.value || earliestStr);
+      const range = readRange();
+      if (!range) {
+        setStatus('', "Scegli data e ora di ritiro e di riconsegna.");
+      } else {
+        const summary = `${formatRange(range.start, range.end)} · ${formatDuration(range.end.getTime() - range.start.getTime())}`;
+        const invalid = validateBookingRange(range.start, range.end);
+        if (invalid) {
+          setStatus('error', `❌ ${invalid}`, range.end > range.start ? summary : '');
+        } else {
+          const clash = busyRanges().find((b) => rangesOverlap(range, b));
+          if (clash) {
+            const what = clash.kind === 'blocked' ? 'un periodo non disponibile' : 'una prenotazione esistente';
+            setStatus('error', `❌ ${card.dataset.vanName} non è disponibile: il periodo si sovrappone a ${what} (${formatRange(clash.start, clash.end)})`, summary);
+            showAlternatives(range);
+          } else {
+            validRange = range;
+            setStatus('ok', `✅ ${card.dataset.vanName} disponibile`, summary);
+          }
+        }
+      }
+      bookBtn.disabled = !validRange;
+      drawSelection(range);
+    }
+
+    [startDateInp, startHourSel, endDateInp, endHourSel].forEach((el) => el.addEventListener('change', onFormChange));
+
+    function onFormChange(e: Event) {
+      // Pick a sensible default end when only the start is set
+      if (e.target === startDateInp && startDateInp.value && (!endDateInp.value || endDateInp.value < startDateInp.value)) {
+        setEndDate(startDateInp.value);
+      }
+      evaluate();
+      const range = readRange();
+      if (range && (e.target === startDateInp || e.target === endDateInp)) calendar.gotoDate(range.start);
+    }
+
+    // Prefill from a suggestion link (?start=ISO&end=ISO)
+    const params = new URLSearchParams(window.location.search);
+    const preStart = new Date(params.get('start') ?? '');
+    const preEnd = new Date(params.get('end') ?? '');
+    if (!isNaN(preStart.getTime()) && !isNaN(preEnd.getTime())) {
+      setStartDate(romeDateStr(preStart));
+      startHourSel.value = String(getRomeParts(preStart).hour);
+      setEndDate(romeDateStr(preEnd));
+      endHourSel.value = String(getRomeParts(preEnd).hour);
+    }
+
+    // ── Calendar (read-only availability + tap-to-fill) ────────────────────
+    const KIND_STYLE = {
+      pending:  { color: '#eab308', title: 'In attesa' },
+      approved: { color: '#dc2626', title: 'Prenotato' },
+      blocked:  { color: '#374151', title: 'Non disponibile' },
+    } as const;
+
+    function buildEvents(): EventInput[] {
+      const events: EventInput[] = busyRanges().map((b) => ({
+        start: b.start, end: b.end,
+        title: KIND_STYLE[b.kind].title,
+        backgroundColor: KIND_STYLE[b.kind].color,
+        borderColor: KIND_STYLE[b.kind].color,
+      }));
+      events.push({
+        id: 'not-bookable', start: new Date(), end: earliest,
+        display: 'background', classNames: ['bg-not-bookable'],
+      });
+      return events;
+    }
+
+    function drawSelection(range: Range | null) {
+      calendar.getEventById('selection')?.remove();
+      if (range && range.end > range.start) {
+        calendar.addEvent({ id: 'selection', start: range.start, end: range.end, display: 'background', classNames: ['bg-selection'] });
+      }
+    }
+
+    const isMobile = () => window.innerWidth < 640;
+    const weekView = () => (isMobile() ? 'timeGrid3' : 'timeGrid7');
+
+    // Tap flow: first tap = start, second tap (after start) = end of that hour
+    let nextTap: 'start' | 'end' = 'start';
+
+    function fillFrom(setDate: (v: string) => void, select: HTMLSelectElement, d: Date) {
+      setDate(romeDateStr(d));
+      select.value = String(getRomeParts(d).hour);
+    }
+
+    const calendar = new Calendar($('calendar'), {
+      plugins: [timeGridPlugin, interactionPlugin, luxonPlugin],
+      timeZone: 'Europe/Rome', // always show Italian time, whatever the visitor's device zone
+      locale: itLocale,
+      initialView: weekView(),
+      initialDate: readRange()?.start ?? earliest,
+      views: {
+        timeGrid7: { type: 'timeGrid', duration: { days: 7 } },
+        timeGrid3: { type: 'timeGrid', duration: { days: 3 } },
+      },
+      windowResize: () => {
+        const target = weekView();
+        if (calendar.view.type !== target) calendar.changeView(target);
+      },
+      headerToolbar: { left: 'title', center: '', right: 'prev,next' },
+      validRange: { start: romeDateStr(new Date()), end: addDays(horizonStr, 1) },
+      nowIndicator: true,
+      slotDuration: '01:00:00',
+      slotMinTime: '00:00:00',
+      slotMaxTime: '24:00:00',
+      scrollTime: '07:00:00',
+      slotLabelFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
+      eventTimeFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
+      allDaySlot: false,
+      height: 640,
+      events: async () => {
+        if (!loadedAt || Date.now() - loadedAt > CACHE_TTL_MS) await loadSlots();
+        setTimeout(evaluate); // re-check the chosen period against fresh data
+        return buildEvents();
+      },
+      dateClick: (info) => {
+        const clicked = info.date;
+        const current = readRange();
+        if (nextTap === 'end' && current && clicked >= current.start) {
+          // End is inclusive of the tapped hour
+          fillFrom(setEndDate, endHourSel, new Date(clicked.getTime() + 3_600_000));
+          nextTap = 'start';
+        } else {
+          fillFrom(setStartDate, startHourSel, clicked);
+          fillFrom(setEndDate, endHourSel, new Date(clicked.getTime() + 3_600_000));
+          nextTap = 'end';
+        }
+        evaluate();
+      },
+    });
+    calendar.render();
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && Date.now() - loadedAt > CACHE_TTL_MS) calendar.refetchEvents();
+    });
+
+    // ── Booking modal ──────────────────────────────────────────────────────
+    const iti = intlTelInput($<HTMLInputElement>('inp-phone'), {
+      initialCountry: 'it',
+      loadUtils: () => import('intl-tel-input/utils'),
+    });
+
+    const FIELD_IDS = ['inp-name', 'inp-company', 'inp-email', 'inp-email-confirm', 'inp-phone'];
+
+    bookBtn.addEventListener('click', () => {
+      if (!validRange) return;
+      const r = validRange;
+      $('modal-slot-info').textContent = `${card.dataset.vanName}: ${formatRange(r.start, r.end)} (${formatDuration(r.end.getTime() - r.start.getTime())})`;
+      $('modal-error').style.display = 'none';
+      $('email-confirm-error').style.display = 'none';
+      $('inp-email-confirm').classList.remove('error-field');
+      FIELD_IDS.forEach((id) => ($<HTMLInputElement>(id).value = ''));
+      $('modal-form').style.display = 'block';
+      $('modal-success').style.display = 'none';
+      $('modal-overlay').classList.add('open');
+      document.body.classList.add('modal-open');
+    });
+
+    function closeBookingModal() {
+      $('modal-overlay').classList.remove('open');
+      document.body.classList.remove('modal-open');
+    }
+    const isSuccessShowing = () => $('modal-success').style.display !== 'none';
+
+    $('modal-cancel').addEventListener('click', closeBookingModal);
+    $('modal-success-ok').addEventListener('click', closeBookingModal);
+    $('modal-overlay').addEventListener('click', (e) => {
+      // While showing the success state, only the "Ho capito" button can close.
+      if (isSuccessShowing()) return;
+      if (e.target === $('modal-overlay')) closeBookingModal();
+    });
+
+    const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+    function checkEmailMatch() {
+      const email = $<HTMLInputElement>('inp-email').value.trim();
+      const confirmInput = $<HTMLInputElement>('inp-email-confirm');
+      const errEl = $('email-confirm-error');
+      if (confirmInput.value.trim() && email !== confirmInput.value.trim()) {
+        errEl.style.display = 'block';
+        confirmInput.classList.add('error-field');
+      } else {
+        errEl.style.display = 'none';
+        confirmInput.classList.remove('error-field');
+      }
+    }
+
+    $('inp-email').addEventListener('input', () => {
+      const emailInput = $<HTMLInputElement>('inp-email');
+      const email = emailInput.value.trim();
+      const invalid = !!email && !EMAIL_RE.test(email);
+      $('email-error').style.display = invalid ? 'block' : 'none';
+      emailInput.classList.toggle('error-field', invalid);
+      checkEmailMatch();
+    });
+    $('inp-email-confirm').addEventListener('input', checkEmailMatch);
+
+    $('modal-submit').addEventListener('click', async () => {
+      const name = $<HTMLInputElement>('inp-name').value.trim();
+      const company = $<HTMLInputElement>('inp-company').value.trim();
+      const email = $<HTMLInputElement>('inp-email').value.trim();
+      const emailConfirm = $<HTMLInputElement>('inp-email-confirm').value.trim();
+      const phone = iti.getNumber() || '';
+      const errEl = $('modal-error');
+      const fail = (msg: string) => { errEl.textContent = msg; errEl.style.display = 'block'; };
+
+      if (!name) return fail('Il nome è obbligatorio.');
+      if (!company) return fail('La società è obbligatoria.');
+      if (!email || !EMAIL_RE.test(email)) return fail("Inserisci un'email valida.");
+      if (email !== emailConfirm) {
+        $('inp-email-confirm').classList.add('error-field');
+        return fail('Le email non corrispondono.');
+      }
+      if (!phone) return fail('Il numero di telefono è obbligatorio.');
+      if (!validRange) return fail('Periodo non valido.');
+      errEl.style.display = 'none';
+
+      const btn = $<HTMLButtonElement>('modal-submit');
+      btn.disabled = true;
+      btn.textContent = 'Invio...';
+
+      const res = await fetch('/api/bookings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          van: VAN_ID, name, company, email, phone,
+          start_at: validRange.start.toISOString(),
+          end_at: validRange.end.toISOString(),
+        }),
+      }).catch(() => null);
+
+      btn.disabled = false;
+      btn.textContent = 'Invia richiesta';
+
+      if (res?.ok) {
+        $('success-email').textContent = email;
+        $('modal-form').style.display = 'none';
+        $('modal-success').style.display = 'block';
+        startPicker.clear(false);
+        endPicker.clear(false);
+        evaluate();
+        nextTap = 'start';
+        loadedAt = 0;
+        calendar.refetchEvents();
+      } else {
+        const data = await res?.json().catch(() => ({}));
+        fail(data?.error ?? 'Errore durante la prenotazione.');
+      }
+    });
+  </script>
+</PublicLayout>
