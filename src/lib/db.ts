@@ -33,7 +33,11 @@ function createPgliteSql(): SqlTag {
   };
 }
 
-const url = import.meta.env.DATABASE_URL ?? process.env.DATABASE_URL;
+const url = import.meta.env.DATABASE_URL || process.env.DATABASE_URL;
+if (!url && !import.meta.env.DEV) {
+  // PGlite is for local dev only: serverless file systems are read-only
+  throw new Error('DATABASE_URL is not set: configure it in the Vercel environment variables');
+}
 const sql: SqlTag = url ? createNeonSql(url) : createPgliteSql();
 
 export default sql;
