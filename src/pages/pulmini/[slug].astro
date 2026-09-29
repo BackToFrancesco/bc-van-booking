@@ -96,8 +96,7 @@ const hours = Array.from({ length: 24 }, (_, i) => i);
       font-size: 0.8rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em;
       color: #888; margin: 0.25rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #eee;
     }
-    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 1rem; }
-    .form-grid .full { grid-column: 1 / -1; }
+    .form-grid { display: grid; grid-template-columns: 1fr; }
     .modal label.field-label { display: block; margin-bottom: 0.3rem; font-size: 0.8rem; font-weight: 700; color: #444; text-transform: uppercase; letter-spacing: 0.03em; }
     .modal input[type="text"], .modal input[type="email"], .modal input[type="tel"], .modal input[type="number"],
     .modal select, .modal textarea {
@@ -151,7 +150,6 @@ const hours = Array.from({ length: 24 }, (_, i) => i);
       .period-grid { grid-template-columns: 1fr; }
       .period-actions .btn { width: 100%; min-height: 50px; font-size: 1rem; }
       .modal { padding: 1.25rem; margin: 0.75rem; max-width: 100%; }
-      .form-grid { grid-template-columns: 1fr; }
       .modal-actions { flex-direction: column-reverse; gap: 0.5rem; }
       .modal-actions .btn { width: 100%; padding: 0.95rem; font-size: 1rem; min-height: 48px; }
     }
