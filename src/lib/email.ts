@@ -2,15 +2,16 @@ import nodemailer from 'nodemailer';
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
 import { TZ } from './config';
-import { CONTACT, MAIL_FROM } from './contact';
+import { MAIL_FROM } from './contact';
 import { formatDuration } from './time';
+import { USAGE_TYPES, AGE_GROUPS } from './booking-rules';
 
-const SENDER_NAME = 'Basket Conselve — Pulmini';
+const SENDER_NAME = 'Servizio Pulmini — Basket Conselve ASD';
 const SUBJECT_PREFIX = 'BC Pulmini';
 
 export const OUTBOX_FILE = resolve(process.cwd(), '.mail-outbox/emails.json');
 
-type MailOptions = { from: string; to: string; subject: string; text: string; html: string };
+type MailOptions = { from: string; to: string; replyTo?: string; subject: string; text: string; html: string };
 export type OutboxEmail = MailOptions & { id: string; timestamp: string };
 
 export function isMockTransport(): boolean {
@@ -57,21 +58,6 @@ function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 }
 
-function contactBlockText(): string {
-  if (!CONTACT) return '';
-  const { name: CONTACT_NAME, phone: CONTACT_NUMBER, waLink: CONTACT_WA_LINK } = CONTACT;
-  return `Per qualsiasi dubbio o domanda, scrivi su WhatsApp a ${CONTACT_NUMBER} (${CONTACT_NAME}):\n${CONTACT_WA_LINK}`;
-}
-
-function contactBlockHtml(): string {
-  if (!CONTACT) return '';
-  const { name: CONTACT_NAME, phone: CONTACT_NUMBER, waLink: CONTACT_WA_LINK } = CONTACT;
-  return `<div style="margin-top:1.5rem;padding-top:0.75rem;border-top:1px solid #eee;font-size:0.92em;color:#444;">
-        <p style="margin:0 0 0.6rem 0;">Per qualsiasi dubbio o domanda, scrivi su WhatsApp a ${CONTACT_NAME} (${CONTACT_NUMBER}):</p>
-        <a href="${CONTACT_WA_LINK}" style="background:#25d366;color:#ffffff;padding:10px 18px;border-radius:6px;text-decoration:none;display:inline-block;font-weight:600;font-size:0.95em;">Scrivi su WhatsApp</a>
-      </div>`;
-}
-
 export function formatDateTime(d: Date | string): string {
   return new Date(d).toLocaleString('it-IT', {
     weekday: 'long', day: '2-digit', month: 'long',
@@ -86,10 +72,6 @@ function formatDate(d: Date | string): string {
   });
 }
 
-export function periodText(start: Date | string, end: Date | string): string {
-  return `dal ${formatDateTime(start)} al ${formatDateTime(end)}`;
-}
-
 function durationText(start: Date | string, end: Date | string): string {
   return formatDuration(new Date(end).getTime() - new Date(start).getTime());
 }
@@ -100,199 +82,208 @@ export type EmailBooking = {
   company: string;
   email: string;
   phone: string;
-  van_name: string;
+  van_label: string;
   start_at: Date | string;
   end_at: Date | string;
+  destination: string | null;
+  usage_type: string | null;
+  age_group: string | null;
+  estimated_km: number | null;
+  notes: string | null;
+  driver_name: string | null;
+  driver_phone: string | null;
+  rejection_reason: string | null;
+  pickup_location: string | null;
+  return_instructions: string | null;
+  rate: string | null;
 };
 
 function siteUrl(): string {
   return import.meta.env.SITE_URL ?? 'http://localhost:4321';
 }
 
-export async function sendAdminNewBooking(b: EmailBooking) {
-  const adminUrl = `${siteUrl()}/admin`;
-  const text = `Nuova richiesta di prenotazione pulmino
+const usageLabel = (b: EmailBooking) => (b.usage_type ? USAGE_TYPES[b.usage_type as keyof typeof USAGE_TYPES] ?? b.usage_type : null);
+const ageLabel = (b: EmailBooking) => (b.age_group ? AGE_GROUPS[b.age_group as keyof typeof AGE_GROUPS] ?? b.age_group : null);
+const driverText = (b: EmailBooking) => (b.driver_name ? `${b.driver_name}${b.driver_phone ? ` (${b.driver_phone})` : ''}` : null);
 
-Pulmino: ${b.van_name}
-Periodo: ${periodText(b.start_at, b.end_at)}
-Durata: ${durationText(b.start_at, b.end_at)}
-Nome: ${b.name}
-Società: ${b.company}
-Email: ${b.email}
-Telefono: ${b.phone}
-ID prenotazione: ${b.id}
+type Field = [label: string, value: string | number | null | undefined];
 
-Vai alla pagina admin per accettare o rifiutare:
-${adminUrl}
-`;
+/** "Label: value" lines, skipping empty values (so missing data never shows up as a placeholder). */
+function fieldsText(fields: Field[]): string {
+  return fields.filter(([, v]) => v !== null && v !== undefined && v !== '').map(([l, v]) => `${l}: ${v}`).join('\n');
+}
 
-  await getTransport().sendMail({
+function fieldsHtml(fields: Field[]): string {
+  return fields
+    .filter(([, v]) => v !== null && v !== undefined && v !== '')
+    .map(([l, v]) => `<strong>${escapeHtml(l)}:</strong> ${escapeHtml(String(v))}`)
+    .join('<br />');
+}
+
+function paragraphsHtml(text: string): string {
+  return text.split('\n\n').map((p) => `<p>${escapeHtml(p).replace(/\n/g, '<br />')}</p>`).join('\n');
+}
+
+const SIGNATURE_TEXT = 'Servizio Pulmini\nBasket Conselve ASD';
+const SIGNATURE_HTML = '<p>Servizio Pulmini<br />Basket Conselve ASD</p>';
+
+function send(to: string, subject: string, text: string, html: string) {
+  return getTransport().sendMail({
     from: fromHeader(),
-    to: import.meta.env.ADMIN_EMAIL,
-    subject: `${SUBJECT_PREFIX} — Nuova richiesta — ${b.van_name} — ${b.company} — ${formatDate(b.start_at)}`,
+    to,
+    replyTo: MAIL_FROM,
+    subject: `${SUBJECT_PREFIX} — ${subject}`,
     text,
-    html: `
-      <h2>Nuova richiesta di prenotazione pulmino</h2>
-      <p><strong>Pulmino:</strong> ${escapeHtml(b.van_name)}</p>
-      <p><strong>Periodo:</strong> ${periodText(b.start_at, b.end_at)}</p>
-      <p><strong>Durata:</strong> ${durationText(b.start_at, b.end_at)}</p>
-      <p><strong>Nome:</strong> ${escapeHtml(b.name)}</p>
-      <p><strong>Società:</strong> ${escapeHtml(b.company)}</p>
-      <p><strong>Email:</strong> ${escapeHtml(b.email)}</p>
-      <p><strong>Telefono:</strong> ${escapeHtml(b.phone)}</p>
-      <p><strong>ID prenotazione:</strong> <code>${b.id}</code></p>
-      <p>
-        <a href="${adminUrl}" style="background:#C8102E;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block;font-weight:600;">
-          Apri la pagina admin
-        </a>
-      </p>
-    `,
+    html: `<div style="font-family:system-ui,-apple-system,sans-serif;line-height:1.55;color:#1a1a1a;max-width:640px">${html}</div>`,
   });
 }
 
+// ── Admin ─────────────────────────────────────────────────────────────────
+
+export async function sendAdminNewBooking(b: EmailBooking) {
+  const adminUrl = `${siteUrl()}/admin`;
+  const fields: Field[] = [
+    ['Pulmino', b.van_label],
+    ['Ritiro', formatDateTime(b.start_at)],
+    ['Riconsegna', formatDateTime(b.end_at)],
+    ['Durata', durationText(b.start_at, b.end_at)],
+    ['Associazione', b.company],
+    ['Referente', b.name],
+    ['Email', b.email],
+    ['Telefono', b.phone],
+    ['Destinazione', b.destination],
+    ['Tipo di attività', usageLabel(b)],
+    ["Fascia d'età", ageLabel(b)],
+    ['Km stimati', b.estimated_km],
+    ['Conducente', driverText(b)],
+    ['Patente conducente', 'dichiarata valida (cat. B o superiore)'],
+    ['Note', b.notes],
+    ['ID richiesta', b.id],
+  ];
+
+  await send(
+    import.meta.env.ADMIN_EMAIL,
+    `Nuova richiesta — ${b.van_label} — ${b.company} — ${formatDate(b.start_at)}`,
+    `Nuova richiesta di utilizzo pulmino\n\n${fieldsText(fields)}\n\nVai alla pagina admin per accettare o rifiutare:\n${adminUrl}\n`,
+    `<h2>Nuova richiesta di utilizzo pulmino</h2>
+      <p>${fieldsHtml(fields)}</p>
+      <p><a href="${adminUrl}" style="background:#C8102E;color:white;padding:10px 20px;border-radius:6px;text-decoration:none;display:inline-block;font-weight:600;">Apri la pagina admin</a></p>`,
+  );
+}
+
+// ── User ──────────────────────────────────────────────────────────────────
+
 export async function sendUserBookingReceived(b: EmailBooking) {
-  const shortId = b.id.slice(0, 8);
-  const text = `Ciao ${b.name},
+  const fields: Field[] = [
+    ['Associazione', b.company],
+    ['Pulmino richiesto', b.van_label],
+    ['Ritiro', formatDateTime(b.start_at)],
+    ['Riconsegna', formatDateTime(b.end_at)],
+    ['Destinazione', b.destination],
+    ['Tipo di attività', usageLabel(b)],
+    ['Conducente indicato', b.driver_name],
+  ];
+  const outro = `La richiesta è in attesa di valutazione e non costituisce ancora una prenotazione confermata.
 
-abbiamo ricevuto la tua richiesta di prenotazione.
+Riceverai una nuova email quando la richiesta sarà accettata o rifiutata. Fino a quel momento il mezzo non deve essere considerato assegnato.
 
-Pulmino: ${b.van_name}
-Periodo: ${periodText(b.start_at, b.end_at)}
-Durata: ${durationText(b.start_at, b.end_at)}
-Società: ${b.company}
+Se uno dei dati riportati non è corretto, rispondi a questa email.`;
 
-La richiesta è in attesa di approvazione. Riceverai un'altra email quando confermeremo la disponibilità del pulmino.
-
-Codice prenotazione: ${shortId}
-
-A presto,
-Basket Conselve
-
-${contactBlockText()}
-`;
-
-  await getTransport().sendMail({
-    from: fromHeader(),
-    to: b.email,
-    subject: `${SUBJECT_PREFIX} — Richiesta ricevuta — ${formatDate(b.start_at)}`,
-    text,
-    html: `
-      <h2>Abbiamo ricevuto la tua richiesta</h2>
-      <p>Ciao ${escapeHtml(b.name)},</p>
-      <p>abbiamo ricevuto la tua richiesta di prenotazione.</p>
-      <p><strong>Pulmino:</strong> ${escapeHtml(b.van_name)}</p>
-      <p><strong>Periodo:</strong> ${periodText(b.start_at, b.end_at)}</p>
-      <p><strong>Durata:</strong> ${durationText(b.start_at, b.end_at)}</p>
-      <p><strong>Società:</strong> ${escapeHtml(b.company)}</p>
-      <p style="background:#fff3cd;border-left:4px solid #f59e0b;padding:0.7rem 1rem;border-radius:4px;">
-        <strong>In attesa di approvazione.</strong> Riceverai un'altra email quando confermeremo la disponibilità del pulmino.
-      </p>
-      <p style="font-size:0.9em;color:#666;">Codice prenotazione: <code>${shortId}</code></p>
-      <p>A presto,<br>Basket Conselve</p>
-      ${contactBlockHtml()}
-    `,
-  });
+  await send(
+    b.email,
+    `Richiesta ricevuta — ${formatDate(b.start_at)}`,
+    `Ciao ${b.name},\n\nabbiamo ricevuto la tua richiesta di utilizzo del pulmino.\n\n${fieldsText(fields)}\n\n${outro}\n\n${SIGNATURE_TEXT}\n`,
+    `<p>Ciao ${escapeHtml(b.name)},</p>
+      <p>abbiamo ricevuto la tua richiesta di utilizzo del pulmino.</p>
+      <p>${fieldsHtml(fields)}</p>
+      ${paragraphsHtml(outro)}
+      ${SIGNATURE_HTML}`,
+  );
 }
 
 export async function sendUserApproved(b: EmailBooking) {
-  const shortId = b.id.slice(0, 8);
-  const text = `Ciao ${b.name},
+  const fields: Field[] = [
+    ['Associazione', b.company],
+    ['Pulmino assegnato', b.van_label],
+    ['Ritiro', formatDateTime(b.start_at)],
+    ['Riconsegna', formatDateTime(b.end_at)],
+    ['Luogo di ritiro e riconsegna', b.pickup_location],
+    ['Destinazione', b.destination],
+    ['Tipo di attività', usageLabel(b)],
+    ['Conducente autorizzato', b.driver_name],
+    ['Tariffa applicata', b.rate],
+  ];
+  const rules = [
+    'il mezzo può essere guidato esclusivamente dal conducente comunicato;',
+    'prima della partenza devono essere verificati e documentati con fotografie o video lo stato interno ed esterno del mezzo;',
+    'nel libretto di bordo elettronico devono essere inseriti orario e chilometri iniziali;',
+    "al termine dell'utilizzo devono essere inseriti orario e chilometri finali e devono essere effettuate le fotografie o il video della riconsegna;",
+    'eventuali danni, incidenti, anomalie o malfunzionamenti devono essere comunicati immediatamente;',
+    'il mezzo deve essere riconsegnato pulito e nelle condizioni in cui è stato ritirato' + (b.return_instructions ? ';' : '.'),
+    ...(b.return_instructions ? [`${b.return_instructions.replace(/[.;]\s*$/, '')}.`] : []),
+  ];
+  const intro = "la richiesta è stata accettata. Il pulmino è quindi prenotato per l'associazione indicata.";
+  const reminder = "Come previsto dal disciplinare già sottoscritto dall'associazione, ti ricordiamo che:";
+  const outro = `Le eventuali spese per sanzioni, parcheggi, pedaggi o accessi non autorizzati restano a carico del conducente o dell'associazione utilizzatrice.
 
-la tua prenotazione è confermata: il pulmino è disponibile.
+Come previsto dal disciplinare, il Comune di Conselve mantiene il diritto di richiedere eccezionalmente il mezzo per inderogabili esigenze istituzionali o di Protezione Civile. In tale eventualità sarete avvisati tempestivamente.
 
-Pulmino: ${b.van_name}
-Periodo: ${periodText(b.start_at, b.end_at)}
-Durata: ${durationText(b.start_at, b.end_at)}
+Buon viaggio!`;
 
-Codice prenotazione: ${shortId}
-
-Buon viaggio!
-Basket Conselve
-
-${contactBlockText()}
-`;
-
-  await getTransport().sendMail({
-    from: fromHeader(),
-    to: b.email,
-    subject: `${SUBJECT_PREFIX} — Prenotazione confermata — ${formatDate(b.start_at)}`,
-    text,
-    html: `
-      <h2>Prenotazione confermata!</h2>
-      <p>Ciao ${escapeHtml(b.name)},</p>
-      <p>la tua prenotazione è confermata: il pulmino è disponibile.</p>
-      <p><strong>Pulmino:</strong> ${escapeHtml(b.van_name)}</p>
-      <p><strong>Periodo:</strong> ${periodText(b.start_at, b.end_at)}</p>
-      <p><strong>Durata:</strong> ${durationText(b.start_at, b.end_at)}</p>
-      <p style="font-size:0.9em;color:#666;">Codice prenotazione: <code>${shortId}</code></p>
-      <p>Buon viaggio!<br>Basket Conselve</p>
-      ${contactBlockHtml()}
-    `,
-  });
+  await send(
+    b.email,
+    `Prenotazione confermata — ${formatDate(b.start_at)}`,
+    `Ciao ${b.name},\n\n${intro}\n\n${fieldsText(fields)}\n\n${reminder}\n\n${rules.map((r) => `• ${r}`).join('\n')}\n\n${outro}\n\n${SIGNATURE_TEXT}\n`,
+    `<p>Ciao ${escapeHtml(b.name)},</p>
+      <p>${escapeHtml(intro)}</p>
+      <p>${fieldsHtml(fields)}</p>
+      <p>${escapeHtml(reminder)}</p>
+      <ul>${rules.map((r) => `<li>${escapeHtml(r)}</li>`).join('')}</ul>
+      ${paragraphsHtml(outro)}
+      ${SIGNATURE_HTML}`,
+  );
 }
 
 export async function sendUserRejected(b: EmailBooking) {
-  const text = `Ciao ${b.name},
+  const fields: Field[] = [
+    ['Associazione', b.company],
+    ['Pulmino richiesto', b.van_label],
+    ['Ritiro', formatDateTime(b.start_at)],
+    ['Riconsegna', formatDateTime(b.end_at)],
+  ];
+  const reason = b.rejection_reason ? `Motivazione: ${b.rejection_reason}` : '';
+  const outro = `La prenotazione non è quindi confermata. Puoi tornare sul sito per verificare la disponibilità degli altri mezzi o scegliere un periodo differente.
 
-purtroppo il pulmino non è disponibile per il periodo richiesto (${periodText(b.start_at, b.end_at)}).
+Per eventuali chiarimenti puoi rispondere a questa email.`;
 
-Puoi effettuare una nuova richiesta per un altro periodo o un altro pulmino.
-
-A presto,
-Basket Conselve
-
-${contactBlockText()}
-`;
-
-  await getTransport().sendMail({
-    from: fromHeader(),
-    to: b.email,
-    subject: `${SUBJECT_PREFIX} — Aggiornamento prenotazione — ${formatDate(b.start_at)}`,
-    text,
-    html: `
-      <h2>Aggiornamento sulla tua prenotazione</h2>
-      <p>Ciao ${escapeHtml(b.name)},</p>
-      <p>purtroppo il pulmino <strong>${escapeHtml(b.van_name)}</strong> non è disponibile per il periodo richiesto (${periodText(b.start_at, b.end_at)}).</p>
-      <p>Puoi effettuare una nuova richiesta per un altro periodo o un altro pulmino.</p>
-      <p>A presto,<br>Basket Conselve</p>
-      ${contactBlockHtml()}
-    `,
-  });
+  await send(
+    b.email,
+    `Richiesta non accettata — ${formatDate(b.start_at)}`,
+    `Ciao ${b.name},\n\npurtroppo non possiamo accettare la seguente richiesta:\n\n${fieldsText(fields)}\n\n${reason ? `${reason}\n\n` : ''}${outro}\n\n${SIGNATURE_TEXT}\n`,
+    `<p>Ciao ${escapeHtml(b.name)},</p>
+      <p>purtroppo non possiamo accettare la seguente richiesta:</p>
+      <p>${fieldsHtml(fields)}</p>
+      ${b.rejection_reason ? `<p><strong>Motivazione:</strong> ${escapeHtml(b.rejection_reason)}</p>` : ''}
+      ${paragraphsHtml(outro)}
+      <p><a href="${siteUrl()}">${escapeHtml(siteUrl().replace(/^https?:\/\//, ''))}</a></p>
+      ${SIGNATURE_HTML}`,
+  );
 }
 
 export async function sendUserRescheduled(b: EmailBooking & { old_start_at: Date | string; old_end_at: Date | string }) {
-  const shortId = b.id.slice(0, 8);
-  const text = `Ciao ${b.name},
+  const oldFields: Field[] = [['Ritiro', formatDateTime(b.old_start_at)], ['Riconsegna', formatDateTime(b.old_end_at)]];
+  const newFields: Field[] = [['Ritiro', formatDateTime(b.start_at)], ['Riconsegna', formatDateTime(b.end_at)]];
+  const outro = 'Per eventuali chiarimenti puoi rispondere a questa email.';
 
-il periodo della tua prenotazione del pulmino ${b.van_name} è stato modificato.
-
-Vecchio periodo: ${periodText(b.old_start_at, b.old_end_at)}
-Nuovo periodo:   ${periodText(b.start_at, b.end_at)}
-
-Codice prenotazione: ${shortId}
-
-A presto,
-Basket Conselve
-
-${contactBlockText()}
-`;
-
-  await getTransport().sendMail({
-    from: fromHeader(),
-    to: b.email,
-    subject: `${SUBJECT_PREFIX} — Periodo aggiornato — ${formatDate(b.start_at)}`,
-    text,
-    html: `
-      <h2>Il periodo della tua prenotazione è stato aggiornato</h2>
-      <p>Ciao ${escapeHtml(b.name)},</p>
-      <p>il periodo della tua prenotazione del pulmino <strong>${escapeHtml(b.van_name)}</strong> è stato modificato:</p>
-      <p>
-        <strong>Vecchio periodo:</strong> <s>${periodText(b.old_start_at, b.old_end_at)}</s><br />
-        <strong>Nuovo periodo:</strong> ${periodText(b.start_at, b.end_at)}
-      </p>
-      <p style="font-size:0.9em;color:#666;">Codice prenotazione: <code>${shortId}</code></p>
-      <p>A presto,<br>Basket Conselve</p>
-      ${contactBlockHtml()}
-    `,
-  });
+  await send(
+    b.email,
+    `Periodo aggiornato — ${formatDate(b.start_at)}`,
+    `Ciao ${b.name},\n\nil periodo della richiesta per il pulmino ${b.van_label} (${b.company}) è stato modificato.\n\nPeriodo precedente\n${fieldsText(oldFields)}\n\nNuovo periodo\n${fieldsText(newFields)}\n\n${outro}\n\n${SIGNATURE_TEXT}\n`,
+    `<p>Ciao ${escapeHtml(b.name)},</p>
+      <p>il periodo della richiesta per il pulmino <strong>${escapeHtml(b.van_label)}</strong> (${escapeHtml(b.company)}) è stato modificato.</p>
+      <p><strong>Periodo precedente</strong><br /><s>${fieldsHtml(oldFields)}</s></p>
+      <p><strong>Nuovo periodo</strong><br />${fieldsHtml(newFields)}</p>
+      ${paragraphsHtml(outro)}
+      ${SIGNATURE_HTML}`,
+  );
 }

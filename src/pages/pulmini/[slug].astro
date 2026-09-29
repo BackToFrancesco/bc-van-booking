@@ -2,17 +2,20 @@
 import PublicLayout from '../../layouts/PublicLayout.astro';
 import { getVan } from '../../lib/repo';
 import { MIN_ADVANCE_DAYS, MIN_BOOKING_HOURS } from '../../lib/config';
+import { USAGE_TYPES, AGE_GROUPS } from '../../lib/booking-rules';
+import { vanLabel, seatsLabel } from '../../lib/vans';
 
 const van = await getVan(Astro.params.slug!);
 if (!van) return new Response('Pulmino non trovato', { status: 404 });
 
+const label = vanLabel(van);
 const hours = Array.from({ length: 24 }, (_, i) => i);
 ---
 
 <PublicLayout
-  title={`Prenota ${van.name} — Basket Conselve`}
+  title={`Richiedi ${label} — Basket Conselve`}
   heroTitle={`${van.name} • Basket Conselve`}
-  heroSubtitle="Scegli le date, invia la richiesta"
+  heroSubtitle={[van.model, seatsLabel(van.seats)].filter(Boolean).join(' · ')}
 >
   <style>
     .back-link { display: inline-block; margin-bottom: 1rem; color: #444; font-size: 0.9rem; font-weight: 600; text-decoration: none; }
@@ -57,9 +60,8 @@ const hours = Array.from({ length: 24 }, (_, i) => i);
     .period-inputs { display: flex; gap: 0.5rem; }
     .period-inputs select {
       padding: 0.55rem 0.7rem; border: 1.5px solid #ddd; border-radius: 7px;
-      font-size: 1rem; font-family: inherit; background: white; min-height: 44px;
+      font-size: 1rem; font-family: inherit; background: white; min-height: 44px; width: 6.2rem;
     }
-    .period-inputs select { width: 6.2rem; }
     .period-inputs select:focus { outline: none; border-color: var(--red); }
 
     .range-status {
@@ -70,12 +72,6 @@ const hours = Array.from({ length: 24 }, (_, i) => i);
     .range-status.error { border-left-color: #dc2626; background: #fef2f2; color: #991b1b; }
     .period-actions { display: flex; justify-content: flex-end; margin-top: 1rem; }
     .period-actions .btn { padding: 0.8rem 1.6rem; }
-
-    .legend { display: flex; gap: 1rem; margin-bottom: 0.6rem; flex-wrap: wrap; }
-    .legend-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; font-weight: 500; }
-    .dot { width: 12px; height: 12px; border-radius: 50%; }
-    .calendar-hint { font-size: 0.82rem; color: #666; margin-bottom: 0.75rem; }
-    #calendar { background: white; border-radius: 10px; padding: 1.25rem; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
 
     /* Modal */
     .modal-overlay {
@@ -89,20 +85,52 @@ const hours = Array.from({ length: 24 }, (_, i) => i);
     .modal-overlay.open { display: flex; }
     .modal {
       background: white; border-radius: 12px; padding: 2rem;
-      width: 100%; max-width: 440px; position: relative;
+      width: 100%; max-width: 560px; position: relative;
       box-shadow: 0 8px 32px rgba(0,0,0,.18);
       margin: auto 0;
     }
     .modal-header { border-bottom: 3px solid var(--red); padding-bottom: 0.75rem; margin-bottom: 1.25rem; }
     .modal-header h2 { font-size: 1.3rem; font-weight: 800; color: var(--red); }
-    .modal label { display: block; margin-bottom: 0.3rem; font-size: 0.85rem; font-weight: 600; color: #444; text-transform: uppercase; letter-spacing: 0.03em; }
-    .modal input { width: 100%; padding: 0.55rem 0.8rem; border: 1.5px solid #ddd; border-radius: 7px; margin-bottom: 1rem; font-size: 1rem; font-family: inherit; transition: border-color 0.15s; }
-    .modal input:focus { outline: none; border-color: var(--red); }
+    .form-section { margin-bottom: 0.5rem; }
+    .form-section h3 {
+      font-size: 0.8rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em;
+      color: #888; margin: 0.25rem 0 0.75rem; padding-bottom: 0.35rem; border-bottom: 1px solid #eee;
+    }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 1rem; }
+    .form-grid .full { grid-column: 1 / -1; }
+    .modal label.field-label { display: block; margin-bottom: 0.3rem; font-size: 0.8rem; font-weight: 700; color: #444; text-transform: uppercase; letter-spacing: 0.03em; }
+    .modal input[type="text"], .modal input[type="email"], .modal input[type="tel"], .modal input[type="number"],
+    .modal select, .modal textarea {
+      width: 100%; padding: 0.55rem 0.8rem; border: 1.5px solid #ddd; border-radius: 7px; margin-bottom: 1rem;
+      font-size: 1rem; font-family: inherit; background: white; transition: border-color 0.15s;
+    }
+    .modal textarea { resize: vertical; min-height: 4.5rem; }
+    .modal input:focus, .modal select:focus, .modal textarea:focus { outline: none; border-color: var(--red); }
     .modal input.error-field { border-color: #dc2626; margin-bottom: 0.25rem; }
     .field-error { color: #dc2626; font-size: 0.8rem; margin-bottom: 0.75rem; display: none; }
+    .radio-row { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+    .radio-pill { flex: 1; position: relative; }
+    .radio-pill input { position: absolute; opacity: 0; pointer-events: none; }
+    .radio-pill span {
+      display: block; text-align: center; padding: 0.55rem 0.5rem; border: 1.5px solid #ddd; border-radius: 7px;
+      font-weight: 600; cursor: pointer; user-select: none; min-height: 44px; line-height: 1.7;
+    }
+    .radio-pill input:checked + span { background: var(--red); border-color: var(--red); color: white; }
+    .radio-pill input:focus-visible + span { outline: 2px solid var(--red); outline-offset: 2px; }
+    .declaration {
+      display: flex; gap: 0.65rem; align-items: flex-start; cursor: pointer;
+      background: #fafafa; border: 1.5px solid #e5e5e5; border-radius: 8px; padding: 0.75rem 0.85rem;
+      font-size: 0.9rem; line-height: 1.45; color: #1a1a1a; margin: 0.25rem 0 1rem;
+    }
+    .declaration input { width: 1.15rem; height: 1.15rem; margin-top: 0.15rem; flex-shrink: 0; accent-color: var(--red); }
+    .declaration.error-field { border-color: #dc2626; background: #fef2f2; }
+    .disclaimer {
+      font-size: 0.85rem; line-height: 1.5; color: #555;
+      background: #fffbeb; border-left: 3px solid #f59e0b; border-radius: 4px; padding: 0.65rem 0.85rem;
+    }
     .modal-actions { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1rem; }
     .slot-info { background: #fff5f5; border-left: 3px solid var(--red); border-radius: 4px; padding: 0.5rem 0.75rem; margin-bottom: 1.25rem; font-size: 0.9rem; font-weight: 600; color: var(--red); line-height: 1.5; }
-    .error-msg { color: #dc2626; font-size: 0.85rem; margin-bottom: 0.5rem; }
+    .error-msg { color: #991b1b; background: #fef2f2; border-radius: 6px; padding: 0.55rem 0.75rem; font-size: 0.88rem; font-weight: 600; margin-bottom: 1rem; }
     .success-msg { color: #1a1a1a; font-size: 0.95rem; line-height: 1.55; margin-top: 0.5rem; }
     .success-msg h3 { font-size: 1.15rem; font-weight: 800; color: #16a34a; margin-bottom: 0.75rem; }
     .success-msg p { margin-bottom: 0.7rem; }
@@ -113,8 +141,6 @@ const hours = Array.from({ length: 24 }, (_, i) => i);
       font-size: 0.9rem;
     }
     .success-msg .ok-btn { width: 100%; margin-top: 0.5rem; }
-    .iti { width: 100%; margin-bottom: 1rem; display: block; }
-    .iti__tel-input { width: 100%; }
 
     @media (max-width: 640px) {
       .steps { grid-template-columns: repeat(2, 1fr); gap: 0.6rem; }
@@ -124,16 +150,14 @@ const hours = Array.from({ length: 24 }, (_, i) => i);
       .step-desc { font-size: 0.75rem; }
       .period-grid { grid-template-columns: 1fr; }
       .period-actions .btn { width: 100%; min-height: 50px; font-size: 1rem; }
-      .legend { gap: 0.6rem; }
-      .legend-item { font-size: 0.78rem; }
-      #calendar { padding: 0.75rem; }
       .modal { padding: 1.25rem; margin: 0.75rem; max-width: 100%; }
+      .form-grid { grid-template-columns: 1fr; }
       .modal-actions { flex-direction: column-reverse; gap: 0.5rem; }
       .modal-actions .btn { width: 100%; padding: 0.95rem; font-size: 1rem; min-height: 48px; }
     }
   </style>
   <style is:global>
-    /* Date inputs are created by flatpickr (JS), so their styles must be global */
+    /* Elements created by JS libraries (flatpickr, intl-tel-input): styles must be global */
     .period-inputs input {
       box-sizing: border-box; flex: 1; min-width: 0; width: 100%;
       padding: 0.55rem 0.7rem; border: 1.5px solid #ddd; border-radius: 7px;
@@ -141,10 +165,12 @@ const hours = Array.from({ length: 24 }, (_, i) => i);
       cursor: pointer;
     }
     .period-inputs input:focus { outline: none; border-color: var(--red); }
-    /* flatpickr in site colours */
     .flatpickr-day.selected, .flatpickr-day.selected:hover { background: #C8102E !important; border-color: #C8102E !important; }
     .flatpickr-day.today { border-color: #C8102E; }
-    .flatpickr-time input:hover, .flatpickr-day:hover { background: #fdecef; }
+    .flatpickr-day:hover { background: #fdecef; }
+    .modal .iti { width: 100%; margin-bottom: 1rem; display: block; }
+    .modal .iti input { margin-bottom: 0 !important; }
+    .iti__tel-input { width: 100%; }
     .alternatives { margin-top: 0.75rem; padding-top: 0.65rem; border-top: 1px solid #fecaca; color: #1a1a1a; font-weight: 500; }
     .alternatives-title { font-weight: 700; margin-bottom: 0.45rem; }
     .alternative {
@@ -157,41 +183,6 @@ const hours = Array.from({ length: 24 }, (_, i) => i);
     .alternative:active { transform: scale(0.99); }
     .alternative-cta { color: #16a34a; font-weight: 700; white-space: nowrap; }
     .range-summary { display: block; font-weight: 500; color: #333; margin-top: 0.2rem; font-size: 0.88rem; }
-    .fc .fc-button-primary {
-      background: var(--red) !important; border-color: var(--red) !important;
-      -webkit-tap-highlight-color: transparent;
-      touch-action: manipulation;
-      transition: background 0.1s, transform 0.1s !important;
-    }
-    @media (hover: hover) {
-      .fc .fc-button-primary:hover { background: var(--red-dark) !important; border-color: var(--red-dark) !important; }
-    }
-    .fc .fc-button-primary:not(:disabled):active { background: var(--red-dark) !important; border-color: var(--red-dark) !important; transform: scale(0.96); }
-    .fc .fc-button-primary:not(:disabled).fc-button-active { background: var(--red-dark) !important; border-color: var(--red-dark) !important; }
-
-    .fc .fc-toolbar { margin-bottom: 1.25rem; }
-    .fc .fc-toolbar-chunk { display: flex !important; flex-direction: row !important; align-items: center !important; gap: 0.4rem; }
-    .fc .fc-toolbar-title { font-size: 1.1rem !important; font-weight: 800 !important; color: #1a1a1a; letter-spacing: -0.02em; }
-    .fc .fc-col-header-cell { background: #f9f9f9; border-color: #e8e8e8 !important; padding: 0.5rem 0 !important; }
-    .fc .fc-col-header-cell-cushion { color: #444 !important; font-weight: 700 !important; font-size: 0.82rem !important; text-transform: uppercase; letter-spacing: 0.05em; text-decoration: none !important; }
-    .fc .fc-daygrid-day-number { color: #444 !important; text-decoration: none !important; font-weight: 600; font-size: 0.85rem; }
-    .fc .fc-timegrid-slot-label-cushion { font-size: 0.75rem !important; font-weight: 700 !important; color: #888 !important; }
-    .fc .fc-timegrid-slot { border-color: #f0f0f0 !important; height: 1.9rem !important; }
-    .fc td, .fc th { border-color: #e8e8e8 !important; }
-    .fc .fc-day-today { background: rgba(200,16,46,.04) !important; }
-    .fc .fc-timegrid-event, .fc .fc-daygrid-event { border-radius: 4px !important; cursor: default !important; }
-    .fc .fc-event-title { font-weight: 600; font-size: 0.78rem; }
-    .fc .fc-bg-event.bg-not-bookable { background: repeating-linear-gradient(135deg, #e5e7eb, #e5e7eb 4px, #f3f4f6 4px, #f3f4f6 8px) !important; opacity: 0.8 !important; }
-    .fc .fc-bg-event.bg-selection { background: #1d4ed8 !important; opacity: 0.35 !important; }
-    .fc .fc-timegrid-col, .fc .fc-daygrid-day { cursor: pointer; }
-    @media (max-width: 640px) {
-      .fc .fc-button { white-space: nowrap; }
-      .fc .fc-toolbar-title { font-size: 0.95rem !important; }
-      .fc .fc-col-header-cell-cushion { font-size: 0.68rem !important; }
-      .fc .fc-timegrid-slot-label-cushion { font-size: 0.62rem !important; }
-      .fc .fc-button { padding: 0.5rem 0.6rem !important; font-size: 0.82rem !important; min-height: 40px; }
-      .fc .fc-toolbar-chunk > * { margin-left: 0 !important; }
-    }
   </style>
 
   <a class="back-link" href="/">← Tutti i pulmini</a>
@@ -205,12 +196,12 @@ const hours = Array.from({ length: 24 }, (_, i) => i);
     <div class="step">
       <div class="step-num">2</div>
       <div class="step-title">Invia la richiesta</div>
-      <div class="step-desc">Compila il form con i tuoi dati</div>
+      <div class="step-desc">Compila il modulo con i dati dell'associazione e del conducente</div>
     </div>
     <div class="step">
       <div class="step-num">3</div>
       <div class="step-title">Attendi conferma</div>
-      <div class="step-desc">Riceverai un'email quando la richiesta sarà accettata</div>
+      <div class="step-desc">Riceverai un'email quando la richiesta sarà accettata o rifiutata</div>
     </div>
     <div class="step">
       <div class="step-num">4</div>
@@ -222,14 +213,15 @@ const hours = Array.from({ length: 24 }, (_, i) => i);
   <div class="info-box">
     <strong>⚠️ Importante</strong>
     <ul>
+      <li>{label}: {seatsLabel(van.seats)}</li>
       <li>Le richieste vanno inviate con almeno <strong>{MIN_ADVANCE_DAYS} giorni</strong> di anticipo</li>
-      <li>Durata minima {MIN_BOOKING_HOURS} ora, a ore intere; puoi prenotare anche per più giorni</li>
-      <li>{van.name}: {van.seats} posti{van.description ? ` · ${van.description}` : ''}</li>
+      <li>Durata minima {MIN_BOOKING_HOURS} ora, a ore intere; puoi richiedere il mezzo anche per più giorni</li>
+      <li>L'invio non costituisce conferma: la prenotazione diventa valida solo dopo l'accettazione scritta di Basket Conselve ASD</li>
     </ul>
   </div>
 
-  <div class="period-card" id="period-card" data-van={van.id} data-van-name={van.name}>
-    <h2>Periodo di prenotazione</h2>
+  <div class="period-card" id="period-card" data-van={van.id} data-van-label={label}>
+    <h2>Periodo di utilizzo</h2>
     <div class="period-grid">
       <div class="period-field">
         <label for="start-date">Ritiro (dal)</label>
@@ -252,41 +244,100 @@ const hours = Array.from({ length: 24 }, (_, i) => i);
     </div>
     <div class="range-status" id="range-status">Scegli data e ora di ritiro e di riconsegna.</div>
     <div class="period-actions">
-      <button class="btn btn-primary" id="book-btn" disabled>Verifica e prenota →</button>
+      <button class="btn btn-primary" id="book-btn" disabled>Compila la richiesta →</button>
     </div>
   </div>
 
-  <div class="legend">
-    <div class="legend-item"><div class="dot" style="background:#1d4ed8"></div> Il tuo periodo</div>
-    <div class="legend-item"><div class="dot" style="background:#eab308"></div> In attesa di conferma</div>
-    <div class="legend-item"><div class="dot" style="background:#dc2626"></div> Prenotato</div>
-    <div class="legend-item"><div class="dot" style="background:#374151"></div> Non disponibile</div>
-  </div>
-  <p class="calendar-hint">Suggerimento: tocca il calendario per scegliere l'ora di ritiro, poi tocca di nuovo per l'ora di riconsegna. Usa le frecce per cambiare settimana.</p>
-  <div id="calendar"></div>
-
   <div class="modal-overlay" id="modal-overlay">
-    <div class="modal">
-      <div class="modal-header"><h2>Richiedi prenotazione</h2></div>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="modal-header"><h2 id="modal-title">Richiesta di utilizzo</h2></div>
       <div class="slot-info" id="modal-slot-info"></div>
-      <div class="error-msg" id="modal-error" style="display:none"></div>
+      <div class="error-msg" id="modal-error" role="alert" style="display:none"></div>
       <div id="modal-form">
-        <label for="inp-name">Nome e cognome *</label>
-        <input id="inp-name" type="text" autocomplete="name" required />
+        <div class="form-section">
+          <h3>Referente</h3>
+          <div class="form-grid">
+            <div class="full">
+              <label class="field-label" for="inp-name">Nome e cognome del referente *</label>
+              <input id="inp-name" type="text" autocomplete="name" required />
+            </div>
+            <div class="full">
+              <label class="field-label" for="inp-company">Associazione / società sportiva *</label>
+              <input id="inp-company" type="text" autocomplete="organization" required />
+            </div>
+            <div>
+              <label class="field-label" for="inp-email">Email *</label>
+              <input id="inp-email" type="email" autocomplete="email" required />
+              <div class="field-error" id="email-error">Inserisci un'email valida.</div>
+            </div>
+            <div>
+              <label class="field-label" for="inp-email-confirm">Conferma email *</label>
+              <input id="inp-email-confirm" type="email" required />
+              <div class="field-error" id="email-confirm-error">Le email non corrispondono.</div>
+            </div>
+            <div class="full">
+              <label class="field-label" for="inp-phone">Telefono *</label>
+              <input id="inp-phone" type="tel" placeholder="333 123 4567" required />
+            </div>
+          </div>
+        </div>
 
-        <label for="inp-company">Società *</label>
-        <input id="inp-company" type="text" autocomplete="organization" required />
+        <div class="form-section">
+          <h3>Utilizzo</h3>
+          <div class="form-grid">
+            <div class="full">
+              <label class="field-label" for="inp-destination">Destinazione *</label>
+              <input id="inp-destination" type="text" placeholder="es. Palazzetto di Padova" required />
+            </div>
+            <div>
+              <label class="field-label" for="inp-usage">Tipologia di utilizzo *</label>
+              <select id="inp-usage" required>
+                <option value="" selected disabled>Seleziona…</option>
+                {Object.entries(USAGE_TYPES).map(([value, text]) => <option value={value}>{text}</option>)}
+              </select>
+            </div>
+            <div>
+              <label class="field-label" for="inp-km">Km complessivi stimati *</label>
+              <input id="inp-km" type="number" inputmode="numeric" min="1" step="1" placeholder="es. 80" required />
+            </div>
+            <div class="full">
+              <span class="field-label" id="age-label" style="display:block;margin-bottom:0.3rem;font-size:0.8rem;font-weight:700;color:#444;text-transform:uppercase;letter-spacing:0.03em;">Fascia d'età *</span>
+              <div class="radio-row" role="radiogroup" aria-labelledby="age-label">
+                {Object.entries(AGE_GROUPS).map(([value, text]) => (
+                  <label class="radio-pill"><input type="radio" name="age-group" value={value} /><span>{text}</span></label>
+                ))}
+              </div>
+            </div>
+            <div class="full">
+              <label class="field-label" for="inp-notes">Note</label>
+              <textarea id="inp-notes" maxlength="1000"></textarea>
+            </div>
+          </div>
+        </div>
 
-        <label for="inp-email">Email *</label>
-        <input id="inp-email" type="email" autocomplete="email" required />
-        <div class="field-error" id="email-error">Inserisci un'email valida.</div>
+        <div class="form-section">
+          <h3>Conducente</h3>
+          <div class="form-grid">
+            <div>
+              <label class="field-label" for="inp-driver-name">Nome e cognome del conducente *</label>
+              <input id="inp-driver-name" type="text" required />
+            </div>
+            <div>
+              <label class="field-label" for="inp-driver-phone">Telefono del conducente *</label>
+              <input id="inp-driver-phone" type="tel" placeholder="333 123 4567" required />
+            </div>
+          </div>
+          <label class="declaration" id="declaration">
+            <input type="checkbox" id="inp-license" required />
+            <span>L'associazione dichiara che il conducente indicato possiede una patente di categoria B o superiore, in corso di validità e idonea alla conduzione del mezzo richiesto. *</span>
+          </label>
+        </div>
 
-        <label for="inp-email-confirm">Conferma email *</label>
-        <input id="inp-email-confirm" type="email" required />
-        <div class="field-error" id="email-confirm-error">Le email non corrispondono.</div>
-
-        <label for="inp-phone">Telefono *</label>
-        <input id="inp-phone" type="tel" placeholder="333 123 4567" required />
+        <p class="disclaimer">
+          La richiesta è presentata nell'ambito del disciplinare già sottoscritto dall'associazione.
+          L'invio non costituisce conferma della prenotazione, che diventerà valida soltanto dopo
+          l'accettazione scritta di Basket Conselve ASD.
+        </p>
 
         <div class="modal-actions">
           <button class="btn btn-secondary" id="modal-cancel">Annulla</button>
@@ -295,24 +346,19 @@ const hours = Array.from({ length: 24 }, (_, i) => i);
       </div>
       <div class="success-msg" id="modal-success" style="display:none">
         <h3>Richiesta inviata!</h3>
-        <p>Abbiamo mandato un'email di conferma a <strong id="success-email"></strong>.</p>
+        <p>Abbiamo mandato un'email di riepilogo a <strong id="success-email"></strong>.</p>
         <p class="spam-note">
           Se non la trovi entro pochi minuti, controlla la cartella <strong>spam</strong>.
           Se è lì, segnala come <strong>"Non è spam"</strong> per ricevere correttamente
           le prossime comunicazioni.
         </p>
-        <p>Riceverai un'altra email quando confermeremo la disponibilità del pulmino.</p>
+        <p>La richiesta è in attesa di valutazione: riceverai un'altra email quando sarà accettata o rifiutata. Fino ad allora il mezzo non è assegnato.</p>
         <button class="btn btn-primary ok-btn" id="modal-success-ok">Ho capito</button>
       </div>
     </div>
   </div>
 
   <script>
-    import { Calendar, type EventInput } from '@fullcalendar/core';
-    import timeGridPlugin from '@fullcalendar/timegrid';
-    import interactionPlugin from '@fullcalendar/interaction';
-    import luxonPlugin from '@fullcalendar/luxon3';
-    import itLocale from '@fullcalendar/core/locales/it';
     import flatpickr from 'flatpickr';
     import { Italian } from 'flatpickr/dist/l10n/it.js';
     import 'flatpickr/dist/flatpickr.min.css';
@@ -320,11 +366,15 @@ const hours = Array.from({ length: 24 }, (_, i) => i);
     import 'intl-tel-input/dist/css/intlTelInput.css';
 
     import { BOOKING_HORIZON_MS } from '../../lib/config';
-    import { validateBookingRange, rangesOverlap, earliestBookableStart, type Range } from '../../lib/booking-rules';
-    import { romeDateTime, romeDateStr, addDays, formatRange, formatDuration, getRomeParts } from '../../lib/time';
+    import {
+      validateBookingRange, rangesOverlap, earliestBookableStart, parseBookingDetails, EMAIL_RE, type Range,
+    } from '../../lib/booking-rules';
+    import { romeDateTime, romeDateStr, formatRange, formatDuration, getRomeParts } from '../../lib/time';
+    import { seatsLabel } from '../../lib/vans';
 
     const card = document.getElementById('period-card')!;
     const VAN_ID = card.dataset.van!;
+    const VAN_LABEL = card.dataset.vanLabel!;
 
     const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
     const startDateInp = $<HTMLInputElement>('start-date');
@@ -354,10 +404,7 @@ const hours = Array.from({ length: 24 }, (_, i) => i);
     startPicker.altInput!.placeholder = 'gg/mm/aaaa';
     endPicker.altInput!.placeholder = 'gg/mm/aaaa';
 
-    function setStartDate(v: string) { startPicker.setDate(v, false); }
-    function setEndDate(v: string) { endPicker.setDate(v, false); }
-
-    // ── Availability data (single fetch for the whole horizon) ─────────────
+    // ── Availability of this van (single fetch for the whole horizon) ──────
     type SlotData = {
       bookings: { start_at: string; end_at: string; status: string }[];
       blocked: { start_at: string; end_at: string; reason: string | null }[];
@@ -368,19 +415,16 @@ const hours = Array.from({ length: 24 }, (_, i) => i);
 
     async function loadSlots(): Promise<void> {
       const from = romeDateStr(new Date());
-      const res = await fetch(`/api/slots?van=${encodeURIComponent(VAN_ID)}&from=${from}&to=${horizonStr}`);
-      if (res.ok) {
+      const res = await fetch(`/api/slots?van=${encodeURIComponent(VAN_ID)}&from=${from}&to=${horizonStr}`).catch(() => null);
+      if (res?.ok) {
         slotData = await res.json();
         loadedAt = Date.now();
       }
     }
 
-    function busyRanges(): (Range & { kind: 'pending' | 'approved' | 'blocked' })[] {
+    function busyRanges(): (Range & { kind: 'booked' | 'blocked' })[] {
       return [
-        ...slotData.bookings.map((b) => ({
-          start: new Date(b.start_at), end: new Date(b.end_at),
-          kind: (b.status === 'approved' ? 'approved' : 'pending') as 'pending' | 'approved',
-        })),
+        ...slotData.bookings.map((b) => ({ start: new Date(b.start_at), end: new Date(b.end_at), kind: 'booked' as const })),
         ...slotData.blocked.map((b) => ({ start: new Date(b.start_at), end: new Date(b.end_at), kind: 'blocked' as const })),
       ];
     }
@@ -414,7 +458,7 @@ const hours = Array.from({ length: 24 }, (_, i) => i);
       const params = new URLSearchParams({ start: range.start.toISOString(), end: range.end.toISOString(), exclude: VAN_ID });
       const res = await fetch(`/api/availability?${params}`).catch(() => null);
       if (!res?.ok || token !== alternativesToken) return;
-      const { free } = (await res.json()) as { free: { id: string; name: string; seats: number }[] };
+      const { free } = (await res.json()) as { free: { id: string; label: string; seats: number }[] };
 
       const box = document.createElement('div');
       box.className = 'alternatives';
@@ -431,13 +475,14 @@ const hours = Array.from({ length: 24 }, (_, i) => i);
           const link = document.createElement('a');
           link.className = 'alternative';
           link.href = `/pulmini/${van.id}?${new URLSearchParams({ start: range.start.toISOString(), end: range.end.toISOString() })}`;
-          const label = document.createElement('span');
-          label.innerHTML = `<strong></strong> · ${van.seats} posti`;
-          label.querySelector('strong')!.textContent = van.name;
+          const text = document.createElement('span');
+          const strong = document.createElement('strong');
+          strong.textContent = van.label;
+          text.append(strong, ` · ${seatsLabel(van.seats)}`);
           const cta = document.createElement('span');
           cta.className = 'alternative-cta';
-          cta.textContent = 'Prenota questo →';
-          link.append(label, cta);
+          cta.textContent = 'Richiedi questo →';
+          link.append(text, cta);
           box.appendChild(link);
         }
       }
@@ -450,7 +495,7 @@ const hours = Array.from({ length: 24 }, (_, i) => i);
       endPicker.set('minDate', startDateInp.value || earliestStr);
       const range = readRange();
       if (!range) {
-        setStatus('', "Scegli data e ora di ritiro e di riconsegna.");
+        setStatus('', 'Scegli data e ora di ritiro e di riconsegna.');
       } else {
         const summary = `${formatRange(range.start, range.end)} · ${formatDuration(range.end.getTime() - range.start.getTime())}`;
         const invalid = validateBookingRange(range.start, range.end);
@@ -459,151 +504,72 @@ const hours = Array.from({ length: 24 }, (_, i) => i);
         } else {
           const clash = busyRanges().find((b) => rangesOverlap(range, b));
           if (clash) {
-            const what = clash.kind === 'blocked' ? 'un periodo non disponibile' : 'una prenotazione esistente';
-            setStatus('error', `❌ ${card.dataset.vanName} non è disponibile: il periodo si sovrappone a ${what} (${formatRange(clash.start, clash.end)})`, summary);
+            setStatus('error', `❌ ${VAN_LABEL} non è disponibile in questo periodo`, summary);
             showAlternatives(range);
           } else {
             validRange = range;
-            setStatus('ok', `✅ ${card.dataset.vanName} disponibile`, summary);
+            setStatus('ok', `✅ ${VAN_LABEL} disponibile`, summary);
           }
         }
       }
       bookBtn.disabled = !validRange;
-      drawSelection(range);
     }
 
-    [startDateInp, startHourSel, endDateInp, endHourSel].forEach((el) => el.addEventListener('change', onFormChange));
-
-    function onFormChange(e: Event) {
+    [startDateInp, startHourSel, endDateInp, endHourSel].forEach((el) => el.addEventListener('change', (e) => {
       // Pick a sensible default end when only the start is set
       if (e.target === startDateInp && startDateInp.value && (!endDateInp.value || endDateInp.value < startDateInp.value)) {
-        setEndDate(startDateInp.value);
+        endPicker.setDate(startDateInp.value, false);
       }
       evaluate();
-      const range = readRange();
-      if (range && (e.target === startDateInp || e.target === endDateInp)) calendar.gotoDate(range.start);
-    }
+    }));
 
     // Prefill from a suggestion link (?start=ISO&end=ISO)
     const params = new URLSearchParams(window.location.search);
     const preStart = new Date(params.get('start') ?? '');
     const preEnd = new Date(params.get('end') ?? '');
     if (!isNaN(preStart.getTime()) && !isNaN(preEnd.getTime())) {
-      setStartDate(romeDateStr(preStart));
+      startPicker.setDate(romeDateStr(preStart), false);
       startHourSel.value = String(getRomeParts(preStart).hour);
-      setEndDate(romeDateStr(preEnd));
+      endPicker.setDate(romeDateStr(preEnd), false);
       endHourSel.value = String(getRomeParts(preEnd).hour);
     }
 
-    // ── Calendar (read-only availability + tap-to-fill) ────────────────────
-    const KIND_STYLE = {
-      pending:  { color: '#eab308', title: 'In attesa' },
-      approved: { color: '#dc2626', title: 'Prenotato' },
-      blocked:  { color: '#374151', title: 'Non disponibile' },
-    } as const;
-
-    function buildEvents(): EventInput[] {
-      const events: EventInput[] = busyRanges().map((b) => ({
-        start: b.start, end: b.end,
-        title: KIND_STYLE[b.kind].title,
-        backgroundColor: KIND_STYLE[b.kind].color,
-        borderColor: KIND_STYLE[b.kind].color,
-      }));
-      events.push({
-        id: 'not-bookable', start: new Date(), end: earliest,
-        display: 'background', classNames: ['bg-not-bookable'],
-      });
-      return events;
-    }
-
-    function drawSelection(range: Range | null) {
-      calendar.getEventById('selection')?.remove();
-      if (range && range.end > range.start) {
-        calendar.addEvent({ id: 'selection', start: range.start, end: range.end, display: 'background', classNames: ['bg-selection'] });
-      }
-    }
-
-    const isMobile = () => window.innerWidth < 640;
-    const weekView = () => (isMobile() ? 'timeGrid3' : 'timeGrid7');
-
-    // Tap flow: first tap = start, second tap (after start) = end of that hour
-    let nextTap: 'start' | 'end' = 'start';
-
-    function fillFrom(setDate: (v: string) => void, select: HTMLSelectElement, d: Date) {
-      setDate(romeDateStr(d));
-      select.value = String(getRomeParts(d).hour);
-    }
-
-    const calendar = new Calendar($('calendar'), {
-      plugins: [timeGridPlugin, interactionPlugin, luxonPlugin],
-      timeZone: 'Europe/Rome', // always show Italian time, whatever the visitor's device zone
-      locale: itLocale,
-      initialView: weekView(),
-      initialDate: readRange()?.start ?? earliest,
-      views: {
-        timeGrid7: { type: 'timeGrid', duration: { days: 7 } },
-        timeGrid3: { type: 'timeGrid', duration: { days: 3 } },
-      },
-      windowResize: () => {
-        const target = weekView();
-        if (calendar.view.type !== target) calendar.changeView(target);
-      },
-      headerToolbar: { left: 'title', center: '', right: 'prev,next' },
-      validRange: { start: romeDateStr(new Date()), end: addDays(horizonStr, 1) },
-      nowIndicator: true,
-      slotDuration: '01:00:00',
-      slotMinTime: '00:00:00',
-      slotMaxTime: '24:00:00',
-      scrollTime: '07:00:00',
-      slotLabelFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
-      eventTimeFormat: { hour: '2-digit', minute: '2-digit', hour12: false },
-      allDaySlot: false,
-      height: 640,
-      events: async () => {
-        if (!loadedAt || Date.now() - loadedAt > CACHE_TTL_MS) await loadSlots();
-        setTimeout(evaluate); // re-check the chosen period against fresh data
-        return buildEvents();
-      },
-      dateClick: (info) => {
-        const clicked = info.date;
-        const current = readRange();
-        if (nextTap === 'end' && current && clicked >= current.start) {
-          // End is inclusive of the tapped hour
-          fillFrom(setEndDate, endHourSel, new Date(clicked.getTime() + 3_600_000));
-          nextTap = 'start';
-        } else {
-          fillFrom(setStartDate, startHourSel, clicked);
-          fillFrom(setEndDate, endHourSel, new Date(clicked.getTime() + 3_600_000));
-          nextTap = 'end';
-        }
-        evaluate();
-      },
-    });
-    calendar.render();
+    loadSlots().then(evaluate);
+    evaluate();
 
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible' && Date.now() - loadedAt > CACHE_TTL_MS) calendar.refetchEvents();
+      if (document.visibilityState === 'visible' && Date.now() - loadedAt > CACHE_TTL_MS) loadSlots().then(evaluate);
     });
 
-    // ── Booking modal ──────────────────────────────────────────────────────
-    const iti = intlTelInput($<HTMLInputElement>('inp-phone'), {
-      initialCountry: 'it',
-      loadUtils: () => import('intl-tel-input/utils'),
-    });
+    // ── Request modal ──────────────────────────────────────────────────────
+    const telOptions = { initialCountry: 'it', loadUtils: () => import('intl-tel-input/utils') };
+    const itiPhone = intlTelInput($<HTMLInputElement>('inp-phone'), telOptions);
+    const itiDriver = intlTelInput($<HTMLInputElement>('inp-driver-phone'), telOptions);
 
-    const FIELD_IDS = ['inp-name', 'inp-company', 'inp-email', 'inp-email-confirm', 'inp-phone'];
+    const TEXT_FIELDS = [
+      'inp-name', 'inp-company', 'inp-email', 'inp-email-confirm', 'inp-phone',
+      'inp-destination', 'inp-km', 'inp-notes', 'inp-driver-name', 'inp-driver-phone',
+    ];
+
+    function resetForm() {
+      TEXT_FIELDS.forEach((id) => ($<HTMLInputElement>(id).value = ''));
+      $<HTMLSelectElement>('inp-usage').value = '';
+      document.querySelectorAll<HTMLInputElement>('input[name="age-group"]').forEach((r) => (r.checked = false));
+      $<HTMLInputElement>('inp-license').checked = false;
+      $('declaration').classList.remove('error-field');
+      $('email-confirm-error').style.display = 'none';
+      $('inp-email-confirm').classList.remove('error-field');
+    }
 
     bookBtn.addEventListener('click', () => {
       if (!validRange) return;
       const r = validRange;
-      $('modal-slot-info').textContent = `${card.dataset.vanName}: ${formatRange(r.start, r.end)} (${formatDuration(r.end.getTime() - r.start.getTime())})`;
+      $('modal-slot-info').textContent = `${VAN_LABEL}: ${formatRange(r.start, r.end)} (${formatDuration(r.end.getTime() - r.start.getTime())})`;
       $('modal-error').style.display = 'none';
-      $('email-confirm-error').style.display = 'none';
-      $('inp-email-confirm').classList.remove('error-field');
-      FIELD_IDS.forEach((id) => ($<HTMLInputElement>(id).value = ''));
       $('modal-form').style.display = 'block';
       $('modal-success').style.display = 'none';
       $('modal-overlay').classList.add('open');
+      $('modal-overlay').scrollTop = 0;
       document.body.classList.add('modal-open');
     });
 
@@ -621,19 +587,12 @@ const hours = Array.from({ length: 24 }, (_, i) => i);
       if (e.target === $('modal-overlay')) closeBookingModal();
     });
 
-    const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-
     function checkEmailMatch() {
       const email = $<HTMLInputElement>('inp-email').value.trim();
       const confirmInput = $<HTMLInputElement>('inp-email-confirm');
-      const errEl = $('email-confirm-error');
-      if (confirmInput.value.trim() && email !== confirmInput.value.trim()) {
-        errEl.style.display = 'block';
-        confirmInput.classList.add('error-field');
-      } else {
-        errEl.style.display = 'none';
-        confirmInput.classList.remove('error-field');
-      }
+      const mismatch = !!confirmInput.value.trim() && email !== confirmInput.value.trim();
+      $('email-confirm-error').style.display = mismatch ? 'block' : 'none';
+      confirmInput.classList.toggle('error-field', mismatch);
     }
 
     $('inp-email').addEventListener('input', () => {
@@ -645,24 +604,42 @@ const hours = Array.from({ length: 24 }, (_, i) => i);
       checkEmailMatch();
     });
     $('inp-email-confirm').addEventListener('input', checkEmailMatch);
+    $('inp-license').addEventListener('change', () => $('declaration').classList.remove('error-field'));
 
     $('modal-submit').addEventListener('click', async () => {
-      const name = $<HTMLInputElement>('inp-name').value.trim();
-      const company = $<HTMLInputElement>('inp-company').value.trim();
-      const email = $<HTMLInputElement>('inp-email').value.trim();
-      const emailConfirm = $<HTMLInputElement>('inp-email-confirm').value.trim();
-      const phone = iti.getNumber() || '';
       const errEl = $('modal-error');
-      const fail = (msg: string) => { errEl.textContent = msg; errEl.style.display = 'block'; };
+      const fail = (msg: string) => {
+        errEl.textContent = msg;
+        errEl.style.display = 'block';
+        errEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      };
+      const val = (id: string) => $<HTMLInputElement>(id).value.trim();
 
-      if (!name) return fail('Il nome è obbligatorio.');
-      if (!company) return fail('La società è obbligatoria.');
-      if (!email || !EMAIL_RE.test(email)) return fail("Inserisci un'email valida.");
-      if (email !== emailConfirm) {
+      const body = {
+        name: val('inp-name'),
+        company: val('inp-company'),
+        email: val('inp-email'),
+        phone: itiPhone.getNumber() || '',
+        destination: val('inp-destination'),
+        usage_type: $<HTMLSelectElement>('inp-usage').value,
+        age_group: document.querySelector<HTMLInputElement>('input[name="age-group"]:checked')?.value ?? '',
+        estimated_km: val('inp-km'),
+        notes: val('inp-notes'),
+        driver_name: val('inp-driver-name'),
+        driver_phone: itiDriver.getNumber() || '',
+        license_declared: $<HTMLInputElement>('inp-license').checked,
+      };
+
+      if (body.email && body.email !== val('inp-email-confirm')) {
         $('inp-email-confirm').classList.add('error-field');
         return fail('Le email non corrispondono.');
       }
-      if (!phone) return fail('Il numero di telefono è obbligatorio.');
+      // Same validation as the server
+      const checked = parseBookingDetails(body);
+      if (typeof checked === 'string') {
+        if (!body.license_declared) $('declaration').classList.add('error-field');
+        return fail(checked);
+      }
       if (!validRange) return fail('Periodo non valido.');
       errEl.style.display = 'none';
 
@@ -674,7 +651,8 @@ const hours = Array.from({ length: 24 }, (_, i) => i);
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          van: VAN_ID, name, company, email, phone,
+          ...body,
+          van: VAN_ID,
           start_at: validRange.start.toISOString(),
           end_at: validRange.end.toISOString(),
         }),
@@ -684,18 +662,18 @@ const hours = Array.from({ length: 24 }, (_, i) => i);
       btn.textContent = 'Invia richiesta';
 
       if (res?.ok) {
-        $('success-email').textContent = email;
+        $('success-email').textContent = body.email;
         $('modal-form').style.display = 'none';
         $('modal-success').style.display = 'block';
+        $('modal-overlay').scrollTop = 0;
+        resetForm();
         startPicker.clear(false);
         endPicker.clear(false);
+        await loadSlots();
         evaluate();
-        nextTap = 'start';
-        loadedAt = 0;
-        calendar.refetchEvents();
       } else {
         const data = await res?.json().catch(() => ({}));
-        fail(data?.error ?? 'Errore durante la prenotazione.');
+        fail(data?.error ?? "Errore durante l'invio della richiesta.");
       }
     });
   </script>

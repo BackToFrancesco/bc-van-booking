@@ -2,6 +2,7 @@
 import PublicLayout from '../layouts/PublicLayout.astro';
 import { listVans } from '../lib/repo';
 import { MIN_ADVANCE_DAYS, MIN_BOOKING_HOURS } from '../lib/config';
+import { vanLabel, seatsLabel } from '../lib/vans';
 
 const vans = await listVans();
 ---
@@ -9,7 +10,7 @@ const vans = await listVans();
 <PublicLayout
   title="Prenotazione Pulmini — Basket Conselve"
   heroTitle="Pulmini • Basket Conselve"
-  heroSubtitle="Scegli il pulmino e richiedi la prenotazione"
+  heroSubtitle="Scegli il pulmino e invia la richiesta di utilizzo"
 >
   <style>
     .vans {
@@ -35,6 +36,7 @@ const vans = await listVans();
     .van-photo svg { width: 72px; height: 72px; opacity: 0.9; }
     .van-body { padding: 1rem 1.1rem 1.2rem; display: flex; flex-direction: column; gap: 0.35rem; flex: 1; }
     .van-name { font-size: 1.15rem; font-weight: 800; }
+    .van-model { font-size: 0.95rem; font-weight: 600; color: var(--red); }
     .van-meta { font-size: 0.85rem; color: #666; }
     .van-card .btn { margin-top: auto; padding: 0.8rem; }
     .section-title {
@@ -54,7 +56,7 @@ const vans = await listVans();
       <li>Scegli il pulmino, poi indica data e ora di ritiro e di riconsegna</li>
       <li>Le richieste vanno inviate con almeno <strong>{MIN_ADVANCE_DAYS} giorni</strong> di anticipo</li>
       <li>Durata minima {MIN_BOOKING_HOURS} ora, puoi prenotare anche per più giorni</li>
-      <li>Riceverai un'email di conferma quando la richiesta sarà accettata</li>
+      <li>L'invio non costituisce conferma: la prenotazione diventa valida solo dopo l'accettazione scritta di Basket Conselve ASD</li>
     </ul>
   </div>
 
@@ -64,7 +66,7 @@ const vans = await listVans();
       <div class="van-card">
         <div class="van-photo">
           {van.photo ? (
-            <img src={van.photo} alt={van.name} />
+            <img src={van.photo} alt={vanLabel(van)} />
           ) : (
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M3 17V7a2 2 0 0 1 2-2h10l5 5v7h-2" />
@@ -76,8 +78,9 @@ const vans = await listVans();
         </div>
         <div class="van-body">
           <div class="van-name">{van.name}</div>
-          <div class="van-meta">{van.seats} posti{van.description ? ` · ${van.description}` : ''}</div>
-          <a class="btn btn-primary" href={`/pulmini/${van.id}`}>Prenota →</a>
+          {van.model && <div class="van-model">{van.model}</div>}
+          <div class="van-meta">{seatsLabel(van.seats)}{van.description ? ` · ${van.description}` : ''}</div>
+          <a class="btn btn-primary" href={`/pulmini/${van.id}`} aria-label={`Richiedi ${vanLabel(van)}`}>Richiedi →</a>
         </div>
       </div>
     ))}

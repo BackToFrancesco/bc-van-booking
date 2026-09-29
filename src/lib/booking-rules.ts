@@ -42,3 +42,74 @@ export function validateBookingRange(start: Date, end: Date, now: Date = new Dat
   }
   return null;
 }
+
+// ── Request details (form fields beyond the period) ────────────────────────
+
+export const USAGE_TYPES = {
+  official_match: 'Gara ufficiale',
+  training: 'Allenamento',
+  social_sports_event: 'Manifestazione socio-sportiva',
+  other: 'Altro',
+} as const;
+export type UsageType = keyof typeof USAGE_TYPES;
+
+export const AGE_GROUPS = {
+  minors: 'Minorenni',
+  adults: 'Maggiorenni',
+} as const;
+export type AgeGroup = keyof typeof AGE_GROUPS;
+
+export const MAX_ESTIMATED_KM = 20_000;
+
+export type BookingDetails = {
+  name: string;           // referent
+  company: string;        // association / sports club
+  email: string;
+  phone: string;
+  destination: string;
+  usage_type: UsageType;
+  age_group: AgeGroup;
+  estimated_km: number;
+  notes: string | null;
+  driver_name: string;
+  driver_phone: string;
+  license_declared: true;
+};
+
+export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+const str = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+
+/** Normalizes and validates the request form. Returns the clean details or an Italian error message. */
+export function parseBookingDetails(body: Record<string, unknown>): BookingDetails | string {
+  const d = {
+    name: str(body.name, 100),
+    company: str(body.company, 150),
+    email: str(body.email, 255).toLowerCase(),
+    phone: str(body.phone, 30),
+    destination: str(body.destination, 200),
+    usage_type: str(body.usage_type, 40),
+    age_group: str(body.age_group, 20),
+    estimated_km: Number(body.estimated_km),
+    notes: str(body.notes, 1000) || null,
+    driver_name: str(body.driver_name, 100),
+    driver_phone: str(body.driver_phone, 30),
+    license_declared: body.license_declared === true,
+  };
+
+  if (d.name.length < 2) return 'Inserisci nome e cognome del referente';
+  if (!d.company) return "Inserisci l'associazione / società sportiva";
+  if (!EMAIL_RE.test(d.email)) return 'Formato email non valido';
+  if (!d.phone) return 'Inserisci il telefono del referente';
+  if (!d.destination) return 'Inserisci la destinazione';
+  if (!(d.usage_type in USAGE_TYPES)) return 'Seleziona la tipologia di utilizzo';
+  if (!(d.age_group in AGE_GROUPS)) return "Seleziona la fascia d'età";
+  if (!Number.isInteger(d.estimated_km) || d.estimated_km < 1 || d.estimated_km > MAX_ESTIMATED_KM) {
+    return 'Inserisci i chilometri complessivi stimati (numero intero)';
+  }
+  if (d.driver_name.length < 2) return 'Inserisci nome e cognome del conducente';
+  if (!d.driver_phone) return 'Inserisci il telefono del conducente';
+  if (!d.license_declared) return 'È necessario dichiarare che il conducente possiede una patente valida';
+
+  return d as BookingDetails;
+}

@@ -9,10 +9,13 @@ Astro (SSR, Vercel adapter) · TypeScript · PostgreSQL (PGlite locally, Neon in
 ## Features
 
 - Landing page with one card per van → one booking page per van (`/pulmini/<id>`).
-- Booking page: "Dal/Al" form (gg/mm/aaaa date picker + whole hour) with live availability check; if the van is busy it suggests the other free vans (with seats) and links to them with the same period prefilled. Below, a read-only week calendar of the van (tap once for start, again for end).
+- Service reserved to ASD/SSD registered in RASD based or active in Conselve (notice on every public page).
+- Booking page: "Dal/Al" form (gg/mm/aaaa date picker + whole hour) with live availability check; if the van is busy it suggests the other free vans (with seats) and links to them with the same period prefilled. No public calendar (admin only).
+- Request form: referent, association, email (+confirm), phone, destination, usage type, age group, estimated km, notes, driver name/phone, mandatory driving-licence declaration, disclaimer.
 - Rules: whole hours, min 1 h, no max (multi-day allowed), at least 7 days in advance, any day/hour. Config in `src/lib/config.ts`, validation in `src/lib/booking-rules.ts` (shared by client and API).
 - Admin (`/admin`): pending requests (accept / reject), calendar filterable per van, status editable in any direction (e.g. rejected → accepted), period editable, delete; drag on the calendar to block a period (single van or all vans); **season blocks** — recurring weekdays + hours over a date range (e.g. an association every Tue/Thu 18–20 for the whole season), with conflict warning.
-- Status flow: `pending → approved | rejected`, with email notifications (request received, new request for admin with link, confirmed, rejected, period changed).
+- Status flow: `pending → approved | rejected` (rejection requires a reason, sent to the user), with email notifications (request received, new request for admin with link, confirmed, rejected, period changed).
+- Confirmation email uses per-van `pickup_location`, `return_instructions` and `rate` (columns of `vans`); empty values are simply omitted.
 
 ## Setup
 
@@ -46,7 +49,7 @@ CONTACT_PHONE=+39 ...
 
 ### Deploy (later)
 
-1. Create the Neon DB and run `schema.sql` on it.
+1. Create the Neon DB and run `schema.sql` on it (it is idempotent: re-run it to apply new migrations).
 2. Set the env vars on Vercel (`DATABASE_URL`, `ADMIN_PASSWORD`, `ADMIN_EMAIL`, `SITE_URL`, `EMAIL_TRANSPORT=smtp`, SMTP vars, `CONTACT_NAME`, `CONTACT_PHONE`).
 3. Van names/photos: edit the `vans` rows (`photo` = path under `public/`).
 

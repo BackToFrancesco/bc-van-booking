@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import { findConflict, listVans } from '../../lib/repo';
 import { validateBookingRange } from '../../lib/booking-rules';
 import { json, error } from '../../lib/http';
+import { vanLabel } from '../../lib/vans';
 
 // Public: which vans (other than `exclude`) are free for the whole period. No personal data.
 export const GET: APIRoute = async ({ url }) => {
@@ -15,7 +16,7 @@ export const GET: APIRoute = async ({ url }) => {
   const conflicts = await Promise.all(vans.map((v) => findConflict(v.id, start, end)));
   const free = vans
     .filter((_, i) => conflicts[i] === null)
-    .map((v) => ({ id: v.id, name: v.name, seats: v.seats }));
+    .map((v) => ({ id: v.id, label: vanLabel(v), seats: v.seats }));
 
   return json({ free });
 };

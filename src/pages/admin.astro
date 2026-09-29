@@ -2,13 +2,17 @@
 import { listVans, listPendingBookings, listBlockSeries } from '../lib/repo';
 import { formatDateTime, formatDuration } from '../lib/time';
 import { isMockTransport } from '../lib/email';
+import { vanLabel } from '../lib/vans';
+import { USAGE_TYPES, AGE_GROUPS } from '../lib/booking-rules';
 
 const [vans, pendingBookings, blockSeries] = await Promise.all([
   listVans(),
   listPendingBookings(),
   listBlockSeries(),
 ]);
-const vanName = new Map(vans.map((v) => [v.id, v.name]));
+const vanName = new Map(vans.map((v) => [v.id, vanLabel(v)]));
+const usageText = (u: string | null) => (u ? USAGE_TYPES[u as keyof typeof USAGE_TYPES] ?? u : null);
+const ageText = (a: string | null) => (a ? AGE_GROUPS[a as keyof typeof AGE_GROUPS] ?? a : null);
 const showDevEmails = isMockTransport();
 
 const DAY_SHORT = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
@@ -56,6 +60,7 @@ const fmtDate = (s: string) => s.split('-').reverse().join('/');
       th { background: #fafafa; font-weight: 700; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; color: #666; }
       tr:last-child td { border-bottom: none; }
       .muted { color: #888; font-size: 0.8rem; }
+      .note-text { margin-top: 0.3rem; font-size: 0.8rem; font-style: italic; color: #555; }
       .btn {
         padding: 0.45rem 0.95rem; border: none; border-radius: 5px; cursor: pointer;
         font-size: 0.85rem; font-weight: 600; margin-right: 0.3rem; font-family: inherit;
@@ -137,6 +142,7 @@ const fmtDate = (s: string) => s.split('-').reverse().join('/');
       .notify-label input[type="checkbox"] { width: 1rem; height: 1rem; accent-color: var(--red); }
       .edit-buttons { display: flex; gap: 0.5rem; justify-content: flex-end; flex-wrap: wrap; }
       .block-modal .form-label { margin-top: 0.75rem; }
+      .reason-input { min-height: 5rem; resize: vertical; }
 
       /* ── Mobile ─────────────────────────────────────────────────── */
       @media (max-width: 760px) {
@@ -294,26 +300,35 @@ const fmtDate = (s: string) => s.split('-').reverse().join('/');
         <table class="bookings-table">
           <thead>
             <tr>
-              <th>Pulmino</th><th>Periodo</th><th>Richiedente</th><th>Contatti</th><th>Ricevuta</th><th>Azioni</th>
+              <th>Pulmino</th><th>Periodo</th><th>Associazione</th><th>Utilizzo</th><th>Conducente</th><th>Azioni</th>
             </tr>
           </thead>
           <tbody>
             {pendingBookings.map((b) => (
               <tr>
-                <td data-label="Pulmino"><strong>{b.van_name}</strong></td>
+                <td data-label="Pulmino"><strong>{b.van_name}</strong>{b.van_model && <><br /><span class="muted">{b.van_model}</span></>}</td>
                 <td data-label="Periodo">
                   {formatDateTime(b.start_at)}<br />→ {formatDateTime(b.end_at)}<br />
-                  <span class="muted">{formatDuration(new Date(b.end_at).getTime() - new Date(b.start_at).getTime())}</span>
+                  <span class="muted">{formatDuration(new Date(b.end_at).getTime() - new Date(b.start_at).getTime())} · ricevuta {formatDateTime(b.created_at)}</span>
                 </td>
-                <td data-label="Richiedente"><strong>{b.company}</strong><br />{b.name}</td>
-                <td data-label="Contatti" style="word-break:break-all">
+                <td data-label="Associazione" style="word-break:break-word">
+                  <strong>{b.company}</strong><br />{b.name}<br />
                   <a href={`mailto:${b.email}`}>{b.email}</a><br />
                   <a href={`tel:${b.phone}`}>{b.phone}</a>
                 </td>
-                <td data-label="Ricevuta"><span class="muted">{formatDateTime(b.created_at)}</span></td>
+                <td data-label="Utilizzo">
+                  {b.destination ?? '—'}<br />
+                  <span class="muted">{[usageText(b.usage_type), ageText(b.age_group), b.estimated_km ? `${b.estimated_km} km` : null].filter(Boolean).join(' · ')}</span>
+                  {b.notes && <div class="note-text">“{b.notes}”</div>}
+                </td>
+                <td data-label="Conducente">
+                  {b.driver_name ?? '—'}<br />
+                  {b.driver_phone && <a href={`tel:${b.driver_phone}`}>{b.driver_phone}</a>}
+                  {b.license_declared && <div class="muted">✓ patente dichiarata</div>}
+                </td>
                 <td data-label="Azioni">
                   <button class="btn btn-approve" data-action="approve" data-id={b.id}>Accetta</button>
-                  <button class="btn btn-reject" data-action="reject" data-id={b.id}>Rifiuta</button>
+                  <button class="btn btn-reject" data-action="reject" data-id={b.id} data-summary={`${vanLabel({ name: b.van_name, model: b.van_model })} · ${b.company} · ${formatDateTime(b.start_at)}`}>Rifiuta</button>
                 </td>
               </tr>
             ))}
@@ -330,7 +345,7 @@ const fmtDate = (s: string) => s.split('-').reverse().join('/');
         <div class="calendar-toolbar" id="van-filter">
           <span class="label">Pulmino</span>
           <button class="chip active" data-van="">Tutti</button>
-          {vans.map((v) => <button class="chip" data-van={v.id}>{v.name}</button>)}
+          {vans.map((v) => <button class="chip" data-van={v.id}>{vanLabel(v)}</button>)}
         </div>
         <div class="legend">
           <div class="legend-item"><div class="dot" style="background:#eab308"></div> In attesa</div>
@@ -350,7 +365,7 @@ const fmtDate = (s: string) => s.split('-').reverse().join('/');
             <label class="form-label" for="series-van">Pulmino</label>
             <select id="series-van" class="form-input">
               <option value="">Tutti i pulmini</option>
-              {vans.map((v) => <option value={v.id}>{v.name}</option>)}
+              {vans.map((v) => <option value={v.id}>{vanLabel(v)}</option>)}
             </select>
           </div>
           <div class="half">
@@ -425,10 +440,17 @@ const fmtDate = (s: string) => s.split('-').reverse().join('/');
 
         <dl id="detail-booking-fields">
           <dt>Pulmino</dt><dd id="detail-van">—</dd>
-          <dt>Società</dt><dd id="detail-company">—</dd>
-          <dt>Nome</dt><dd id="detail-name">—</dd>
+          <dt>Associazione</dt><dd id="detail-company">—</dd>
+          <dt>Referente</dt><dd id="detail-name">—</dd>
           <dt>Email</dt><dd id="detail-email" style="word-break:break-all">—</dd>
           <dt>Telefono</dt><dd id="detail-phone">—</dd>
+          <dt>Destinazione</dt><dd id="detail-destination">—</dd>
+          <dt>Utilizzo</dt><dd id="detail-usage">—</dd>
+          <dt>Fascia d'età</dt><dd id="detail-age">—</dd>
+          <dt>Km stimati</dt><dd id="detail-km">—</dd>
+          <dt>Conducente</dt><dd id="detail-driver">—</dd>
+          <dt>Patente</dt><dd id="detail-license">—</dd>
+          <dt>Note</dt><dd id="detail-notes" style="white-space:pre-wrap">—</dd>
           <dt>Stato</dt>
           <dd>
             <select id="detail-status" class="detail-input" disabled>
@@ -441,6 +463,7 @@ const fmtDate = (s: string) => s.split('-').reverse().join('/');
           <dd><input type="text" id="detail-start" class="detail-input" disabled /></dd>
           <dt>Fine</dt>
           <dd><input type="text" id="detail-end" class="detail-input" disabled /></dd>
+          <dt id="detail-reason-label">Motivo rifiuto</dt><dd id="detail-reason" style="white-space:pre-wrap">—</dd>
           <dt>ID</dt><dd><code id="detail-id" style="font-size:0.8rem">—</code></dd>
         </dl>
 
@@ -463,6 +486,10 @@ const fmtDate = (s: string) => s.split('-').reverse().join('/');
 
         <div class="modal-actions" id="detail-actions"></div>
         <div class="modal-actions detail-edit-row" id="detail-edit-actions" style="display:none">
+          <div id="detail-edit-reason-row" style="display:none">
+            <label class="form-label" for="detail-edit-reason">Motivazione del rifiuto (inviata all'utente) *</label>
+            <textarea id="detail-edit-reason" class="form-input reason-input" maxlength="1000" placeholder="es. Pulmino già impegnato per un'esigenza istituzionale"></textarea>
+          </div>
           <div>
             <label class="notify-label">
               <input type="checkbox" id="detail-notify" checked disabled /> Invia email all'utente con le modifiche
@@ -477,6 +504,24 @@ const fmtDate = (s: string) => s.split('-').reverse().join('/');
       </div>
     </div>
 
+    <!-- Reject modal -->
+    <div class="modal-overlay" id="reject-modal">
+      <div class="modal">
+        <div class="modal-header">
+          <h2>Rifiuta richiesta</h2>
+          <button class="modal-close" id="reject-close" aria-label="Chiudi">×</button>
+        </div>
+        <p id="reject-summary" style="font-size:0.9rem;font-weight:600;color:var(--red);margin-bottom:0.75rem"></p>
+        <label class="form-label" for="reject-reason">Motivazione (inviata all'utente via email) *</label>
+        <textarea id="reject-reason" class="form-input reason-input" maxlength="1000" placeholder="es. Pulmino già impegnato in quel periodo"></textarea>
+        <div id="reject-error" class="error-msg" style="display:none"></div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" id="reject-cancel">Annulla</button>
+          <button class="btn btn-reject" id="reject-confirm">Rifiuta e invia email</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Block modal -->
     <div class="modal-overlay" id="block-modal">
       <div class="modal block-modal">
@@ -487,7 +532,7 @@ const fmtDate = (s: string) => s.split('-').reverse().join('/');
         <label class="form-label" for="block-van">Pulmino</label>
         <select id="block-van" class="form-input">
           <option value="">Tutti i pulmini</option>
-          {vans.map((v) => <option value={v.id}>{v.name}</option>)}
+          {vans.map((v) => <option value={v.id}>{vanLabel(v)}</option>)}
         </select>
         <label class="form-label" for="block-start">Dal</label>
         <input type="text" id="block-start" class="form-input" />
@@ -514,7 +559,8 @@ const fmtDate = (s: string) => s.split('-').reverse().join('/');
       import type { Instance } from 'flatpickr/dist/types/instance';
       import 'flatpickr/dist/flatpickr.min.css';
       import itLocale from '@fullcalendar/core/locales/it';
-      import { getRomeParts, romeDateTime, formatRange } from '../lib/time';
+      import { getRomeParts, romeDateTime, formatRange, formatDateTime } from '../lib/time';
+      import { USAGE_TYPES, AGE_GROUPS } from '../lib/booking-rules';
 
       const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -533,10 +579,49 @@ const fmtDate = (s: string) => s.split('-').reverse().join('/');
         else alert('Errore: ' + ((await res.json().catch(() => ({}))).error ?? res.status));
       }
 
+      // ── Reject modal (a reason is required and emailed to the user) ─────
+      let rejectId: string | null = null;
+
+      function openRejectModal(id: string, summary: string) {
+        rejectId = id;
+        $('reject-summary').textContent = summary;
+        $<HTMLTextAreaElement>('reject-reason').value = '';
+        $('reject-error').style.display = 'none';
+        closeModal('detail-modal');
+        openModal('reject-modal');
+        $('reject-reason').focus();
+      }
+
+      $('reject-close').addEventListener('click', () => closeModal('reject-modal'));
+      $('reject-cancel').addEventListener('click', () => closeModal('reject-modal'));
+      $('reject-confirm').addEventListener('click', async () => {
+        const reason = $<HTMLTextAreaElement>('reject-reason').value.trim();
+        const errEl = $('reject-error');
+        if (!reason) {
+          errEl.textContent = 'Indica la motivazione del rifiuto.';
+          errEl.style.display = 'block';
+          return;
+        }
+        const btn = $<HTMLButtonElement>('reject-confirm');
+        btn.disabled = true;
+        const res = await fetch(`/api/admin/bookings/${rejectId}/reject`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason }),
+        });
+        btn.disabled = false;
+        if (res.ok) window.location.reload();
+        else {
+          errEl.textContent = (await res.json().catch(() => ({}))).error ?? 'Errore durante il rifiuto';
+          errEl.style.display = 'block';
+        }
+      });
+
       // ── Pending table actions ───────────────────────────────────────────
       document.querySelectorAll<HTMLElement>('[data-action]').forEach((btn) => {
         btn.addEventListener('click', async () => {
-          const { action, id } = btn.dataset;
+          const { action, id, summary } = btn.dataset;
+          if (action === 'reject') return openRejectModal(id!, summary ?? '');
           (btn as HTMLButtonElement).disabled = true;
           await apiPost(`/api/admin/bookings/${id}/${action}`);
           (btn as HTMLButtonElement).disabled = false;
@@ -642,6 +727,7 @@ const fmtDate = (s: string) => s.split('-').reverse().join('/');
         $('detail-error').style.display = 'none';
 
         if (editing) {
+          $<HTMLTextAreaElement>('detail-edit-reason').value = '';
           updateEditSummary();
         } else {
           statusSel.value = detail.originalStatus;
@@ -649,6 +735,7 @@ const fmtDate = (s: string) => s.split('-').reverse().join('/');
           pickers.detailEnd.setDate(toRomeInput(detail.originalEnd), false);
           $<HTMLButtonElement>('detail-save').disabled = true;
           $<HTMLInputElement>('detail-notify').disabled = true;
+          $('detail-edit-reason-row').style.display = 'none';
         }
       }
 
@@ -667,18 +754,21 @@ const fmtDate = (s: string) => s.split('-').reverse().join('/');
         const { status, newStart, newEnd, statusChanged, timeChanged } = readEdit();
         const hasChanges = statusChanged || timeChanged;
         const invalidRange = timeChanged && newEnd <= newStart;
+        const needsReason = statusChanged && status === 'rejected';
+        $('detail-edit-reason-row').style.display = needsReason ? '' : 'none';
+        const missingReason = needsReason && !$<HTMLTextAreaElement>('detail-edit-reason').value.trim();
 
         const errEl = $('detail-error');
         errEl.textContent = 'La fine deve essere successiva all\'inizio.';
         errEl.style.display = invalidRange ? 'block' : 'none';
 
-        $<HTMLButtonElement>('detail-save').disabled = !hasChanges || invalidRange;
+        $<HTMLButtonElement>('detail-save').disabled = !hasChanges || invalidRange || missingReason;
         $<HTMLInputElement>('detail-notify').disabled = !hasChanges || invalidRange;
 
         const helpEl = $('detail-notify-help');
         if (!hasChanges) helpEl.textContent = 'Nessuna modifica da salvare.';
         else if (statusChanged && status === 'approved') helpEl.textContent = 'Verrà inviata l\'email "Prenotazione confermata".';
-        else if (statusChanged && status === 'rejected') helpEl.textContent = 'Verrà inviata l\'email "Aggiornamento prenotazione" (pulmino non disponibile).';
+        else if (statusChanged && status === 'rejected') helpEl.textContent = 'Verrà inviata l\'email "Richiesta non accettata" con la motivazione.';
         else if (timeChanged && status !== 'rejected') helpEl.textContent = 'Verrà inviata l\'email "Periodo aggiornato" con vecchio e nuovo periodo.';
         else helpEl.textContent = 'Nessuna email per il ritorno allo stato "In attesa".';
       }
@@ -711,6 +801,17 @@ const fmtDate = (s: string) => s.split('-').reverse().join('/');
           $('detail-name').textContent = p.name;
           $('detail-email').textContent = p.email;
           $('detail-phone').textContent = p.phone;
+          $('detail-destination').textContent = p.destination ?? '—';
+          $('detail-usage').textContent = p.usageType ? USAGE_TYPES[p.usageType as keyof typeof USAGE_TYPES] ?? p.usageType : '—';
+          $('detail-age').textContent = p.ageGroup ? AGE_GROUPS[p.ageGroup as keyof typeof AGE_GROUPS] ?? p.ageGroup : '—';
+          $('detail-km').textContent = p.estimatedKm ? `${p.estimatedKm} km` : '—';
+          $('detail-driver').textContent = p.driverName ? `${p.driverName}${p.driverPhone ? ` · ${p.driverPhone}` : ''}` : '—';
+          $('detail-license').textContent = p.licenseDeclared ? '✓ Dichiarata valida (cat. B o superiore)' : '—';
+          $('detail-notes').textContent = p.notes ?? '—';
+          const showReason = p.status === 'rejected' && !!p.rejectionReason;
+          $('detail-reason-label').style.display = showReason ? '' : 'none';
+          $('detail-reason').style.display = showReason ? '' : 'none';
+          $('detail-reason').textContent = p.rejectionReason ?? '—';
           $('detail-id').textContent = p.bookingId.slice(0, 8);
 
           detail = { bookingId: p.bookingId, originalStatus: p.status, originalStart: start, originalEnd: end };
@@ -719,7 +820,7 @@ const fmtDate = (s: string) => s.split('-').reverse().join('/');
           if (p.status === 'pending') {
             actions.append(
               actionButton('btn-approve', 'Accetta', () => apiPost(`/api/admin/bookings/${p.bookingId}/approve`)),
-              actionButton('btn-reject', 'Rifiuta', () => apiPost(`/api/admin/bookings/${p.bookingId}/reject`)),
+              actionButton('btn-reject', 'Rifiuta', () => openRejectModal(p.bookingId, `${p.vanName} · ${p.company} · ${formatDateTime(start)}`)),
             );
           }
           actions.append(actionButton('btn-secondary', 'Modifica', () => setEditMode(true)));
@@ -764,6 +865,7 @@ const fmtDate = (s: string) => s.split('-').reverse().join('/');
       }
 
       [statusSel, startInp, endInp].forEach((el) => el.addEventListener('change', updateEditSummary));
+      $('detail-edit-reason').addEventListener('input', updateEditSummary);
       $('detail-cancel-edit').addEventListener('click', () => setEditMode(false));
       $('detail-close').addEventListener('click', () => closeModal('detail-modal'));
 
@@ -774,6 +876,7 @@ const fmtDate = (s: string) => s.split('-').reverse().join('/');
 
         const body: Record<string, unknown> = { notify: $<HTMLInputElement>('detail-notify').checked };
         if (statusChanged) body.status = status;
+        if (statusChanged && status === 'rejected') body.rejection_reason = $<HTMLTextAreaElement>('detail-edit-reason').value.trim();
         if (timeChanged) {
           body.start_at = newStart.toISOString();
           body.end_at = newEnd.toISOString();

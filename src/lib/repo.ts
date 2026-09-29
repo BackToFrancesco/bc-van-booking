@@ -1,11 +1,16 @@
 import sql from './db';
 import type { BookingStatus } from './booking-rules';
 
-export type Van = { id: string; name: string; seats: number; description: string | null; photo: string | null };
+export type Van = {
+  id: string; name: string; model: string | null; seats: number; description: string | null; photo: string | null;
+};
 
 export type Booking = {
   id: string; van_id: string; name: string; company: string; email: string; phone: string;
   start_at: Date; end_at: Date; status: BookingStatus; created_at: Date;
+  destination: string | null; usage_type: string | null; age_group: string | null; estimated_km: number | null;
+  notes: string | null; driver_name: string | null; driver_phone: string | null; license_declared: boolean;
+  rejection_reason: string | null;
 };
 
 export type BlockedSlot = {
@@ -18,11 +23,11 @@ export type BlockSeries = {
 };
 
 export async function listVans(): Promise<Van[]> {
-  return sql<Van>`SELECT id, name, seats, description, photo FROM vans ORDER BY sort_order, id`;
+  return sql<Van>`SELECT id, name, model, seats, description, photo FROM vans ORDER BY sort_order, id`;
 }
 
 export async function getVan(id: string): Promise<Van | null> {
-  const [van] = await sql<Van>`SELECT id, name, seats, description, photo FROM vans WHERE id = ${id}`;
+  const [van] = await sql<Van>`SELECT id, name, model, seats, description, photo FROM vans WHERE id = ${id}`;
   return van ?? null;
 }
 
@@ -57,9 +62,9 @@ export async function findConflict(
   return null;
 }
 
-export async function listPendingBookings(): Promise<(Booking & { van_name: string })[]> {
-  return sql<Booking & { van_name: string }>`
-    SELECT b.*, v.name AS van_name
+export async function listPendingBookings(): Promise<(Booking & { van_name: string; van_model: string | null })[]> {
+  return sql<Booking & { van_name: string; van_model: string | null }>`
+    SELECT b.*, v.name AS van_name, v.model AS van_model
     FROM bookings b JOIN vans v ON v.id = b.van_id
     WHERE b.status = 'pending'
     ORDER BY b.start_at ASC

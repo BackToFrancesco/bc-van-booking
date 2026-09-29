@@ -9,10 +9,11 @@ export type UpdateResult = { ok: true } | { ok: false; error: string; status: nu
 /**
  * Applies a status and/or period change to a booking (admin).
  * Any status transition is allowed; overlap is re-checked whenever the result is not 'rejected'.
+ * Moving to 'rejected' requires a reason, which is sent to the user.
  */
 export async function updateBooking(
   id: string,
-  changes: { status?: string; start_at?: Date; end_at?: Date; notify?: boolean },
+  changes: { status?: string; start_at?: Date; end_at?: Date; notify?: boolean; rejection_reason?: string },
 ): Promise<UpdateResult> {
   const current = await getBooking(id);
   if (!current) return { ok: false, error: 'Prenotazione non trovata', status: 404 };
@@ -34,13 +35,20 @@ export async function updateBooking(
     end.getTime() !== new Date(current.end_at).getTime();
   if (!statusChanged && !timeChanged) return { ok: true };
 
+  const reason = changes.rejection_reason?.trim().slice(0, 1000) || null;
+  if (statusChanged && status === 'rejected' && !reason) {
+    return { ok: false, error: 'Indica la motivazione del rifiuto', status: 400 };
+  }
+
   if (status !== 'rejected') {
     const conflict = await findConflict(current.van_id, start, end, id);
     if (conflict) return { ok: false, error: conflict, status: 409 };
   }
 
   await sql`
-    UPDATE bookings SET status = ${status}, start_at = ${start}, end_at = ${end}
+    UPDATE bookings
+    SET status = ${status}, start_at = ${start}, end_at = ${end},
+        rejection_reason = ${status === 'rejected' ? (reason ?? current.rejection_reason) : null}
     WHERE id = ${id}
   `;
 

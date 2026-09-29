@@ -48,8 +48,29 @@ CREATE TABLE IF NOT EXISTS blocked_slots (
 );
 CREATE INDEX IF NOT EXISTS blocked_slots_range ON blocked_slots (start_at, end_at);
 
-INSERT INTO vans (id, name, seats, description, sort_order) VALUES
-  ('pulmino-1', 'Pulmino 1', 9, NULL, 1),
-  ('pulmino-2', 'Pulmino 2', 9, NULL, 2),
-  ('pulmino-3', 'Pulmino 3', 9, NULL, 3)
-ON CONFLICT (id) DO NOTHING;
+-- ── Migrations (idempotent: safe to re-run on an existing database) ───────
+
+-- Van details shown to users and used in the confirmation email
+ALTER TABLE vans ADD COLUMN IF NOT EXISTS model               VARCHAR(100);  -- e.g. "Fiat Elettrico"
+ALTER TABLE vans ADD COLUMN IF NOT EXISTS pickup_location     VARCHAR(255);
+ALTER TABLE vans ADD COLUMN IF NOT EXISTS return_instructions VARCHAR(500);
+ALTER TABLE vans ADD COLUMN IF NOT EXISTS rate                VARCHAR(255);
+
+-- Request details (nullable in the DB so older rows stay valid; required by the API)
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS destination      VARCHAR(200);
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS usage_type       VARCHAR(40);   -- official_match | training | social_sports_event | other
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS age_group        VARCHAR(20);   -- minors | adults
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS estimated_km     INTEGER;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS notes            VARCHAR(1000);
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS driver_name      VARCHAR(100);
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS driver_phone     VARCHAR(30);
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS license_declared BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE bookings ADD COLUMN IF NOT EXISTS rejection_reason VARCHAR(1000);
+
+-- ── Seed ──────────────────────────────────────────────────────────────────
+-- seats = passenger seats, the driver is extra ("8 posti + conducente")
+INSERT INTO vans (id, name, model, seats, sort_order) VALUES
+  ('pulmino-1', 'Pulmino 1', 'Fiat Elettrico', 8, 1),
+  ('pulmino-2', 'Pulmino 2', 'Fiat Elettrico', 8, 2),
+  ('pulmino-3', 'Pulmino 3', 'Ford Ibrido',    8, 3)
+ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, model = EXCLUDED.model, seats = EXCLUDED.seats;
