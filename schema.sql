@@ -54,7 +54,7 @@ CREATE INDEX IF NOT EXISTS blocked_slots_range ON blocked_slots (start_at, end_a
 ALTER TABLE vans ADD COLUMN IF NOT EXISTS model               VARCHAR(100);  -- e.g. "Fiat Elettrico"
 ALTER TABLE vans ADD COLUMN IF NOT EXISTS pickup_location     VARCHAR(255);
 ALTER TABLE vans ADD COLUMN IF NOT EXISTS return_instructions VARCHAR(500);
-ALTER TABLE vans ADD COLUMN IF NOT EXISTS rate                VARCHAR(255);
+ALTER TABLE vans ADD COLUMN IF NOT EXISTS rate                VARCHAR(255);  -- unused: the rate is defined in the disciplinare
 
 -- Request details (nullable in the DB so older rows stay valid; required by the API)
 ALTER TABLE bookings ADD COLUMN IF NOT EXISTS destination      VARCHAR(200);
@@ -69,8 +69,16 @@ ALTER TABLE bookings ADD COLUMN IF NOT EXISTS rejection_reason VARCHAR(1000);
 
 -- ── Seed ──────────────────────────────────────────────────────────────────
 -- seats = passenger seats, the driver is extra ("8 posti + conducente")
-INSERT INTO vans (id, name, model, seats, sort_order) VALUES
-  ('pulmino-1', 'Pulmino 1', 'Fiat Elettrico', 8, 1),
-  ('pulmino-2', 'Pulmino 2', 'Fiat Elettrico', 8, 2),
-  ('pulmino-3', 'Pulmino 3', 'Ford Ibrido',    8, 3)
-ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, model = EXCLUDED.model, seats = EXCLUDED.seats;
+INSERT INTO vans (id, name, model, seats, sort_order, pickup_location, return_instructions) VALUES
+  ('pulmino-1', 'Pulmino 1', 'Fiat Elettrico', 8, 1,
+   'Palestra Morelli, parcheggio lato Mattei (in angolo vicino al campo da Beach Volley)',
+   'Se la batteria è sotto il 35%, riporta il pulmino dentro la palestra Morelli (lato spogliatoi), davanti ai box di ricarica; altrimenti riportalo dove lo hai ritirato'),
+  ('pulmino-2', 'Pulmino 2', 'Fiat Elettrico', 8, 2,
+   'Palestra Morelli, parcheggio lato Mattei (in angolo vicino al campo da Beach Volley)',
+   'Se la batteria è sotto il 35%, riporta il pulmino dentro la palestra Morelli (lato spogliatoi), davanti ai box di ricarica; altrimenti riportalo dove lo hai ritirato'),
+  ('pulmino-3', 'Pulmino 3', 'Ford Ibrido',    8, 3,
+   'Palestra Morelli, parcheggio lato Mattei (in angolo vicino al campo da Beach Volley)',
+   'Riconsegna il pulmino con il serbatoio di benzina completamente pieno')
+ON CONFLICT (id) DO UPDATE SET
+  name = EXCLUDED.name, model = EXCLUDED.model, seats = EXCLUDED.seats,
+  pickup_location = EXCLUDED.pickup_location, return_instructions = EXCLUDED.return_instructions;

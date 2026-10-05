@@ -1,7 +1,7 @@
 ---
 import PublicLayout from '../../layouts/PublicLayout.astro';
 import { getVan } from '../../lib/repo';
-import { MIN_ADVANCE_DAYS, MIN_BOOKING_HOURS } from '../../lib/config';
+import { MIN_ADVANCE_DAYS, MIN_BOOKING_HOURS, PICKUP_MAPS_URL } from '../../lib/config';
 import { USAGE_TYPES, AGE_GROUPS } from '../../lib/booking-rules';
 import { vanLabel, seatsLabel } from '../../lib/vans';
 
@@ -218,6 +218,17 @@ const hours = Array.from({ length: 24 }, (_, i) => i);
     </ul>
   </div>
 
+  <div class="info-box">
+    <strong>🚐 Ritiro e riconsegna</strong>
+    <ul>
+      {van.pickup_location && <li><strong>Dove:</strong> {van.pickup_location} · <a href={PICKUP_MAPS_URL} target="_blank" rel="noopener">Apri in Maps</a></li>}
+      <li><strong>Foto o video obbligatori</strong> dello stato del mezzo, al ritiro e alla riconsegna</li>
+      <li>Orario e chilometri vanno registrati nel libretto di bordo elettronico, alla partenza e al rientro</li>
+      {van.return_instructions && <li>{van.return_instructions}</li>}
+      <li>Tutti i dettagli: <a href="/istruzioni">istruzioni per ritiro e riconsegna</a> · <a href="/disciplinare.pdf" target="_blank" rel="noopener">disciplinare (PDF)</a></li>
+    </ul>
+  </div>
+
   <div class="period-card" id="period-card" data-van={van.id} data-van-label={label}>
     <h2>Periodo di utilizzo</h2>
     <div class="period-grid">
@@ -332,7 +343,7 @@ const hours = Array.from({ length: 24 }, (_, i) => i);
         </div>
 
         <p class="disclaimer">
-          La richiesta è presentata nell'ambito del disciplinare già sottoscritto dall'associazione.
+          La richiesta è presentata nell'ambito del <a href="/disciplinare.pdf" target="_blank" rel="noopener">disciplinare</a> già sottoscritto dall'associazione.
           L'invio non costituisce conferma della prenotazione, che diventerà valida soltanto dopo
           l'accettazione scritta di Basket Conselve ASD.
         </p>
@@ -351,6 +362,7 @@ const hours = Array.from({ length: 24 }, (_, i) => i);
           le prossime comunicazioni.
         </p>
         <p>La richiesta è in attesa di valutazione: riceverai un'altra email quando sarà accettata o rifiutata. Fino ad allora il mezzo non è assegnato.</p>
+        <p>Nel frattempo leggi le <a href="/istruzioni" target="_blank">istruzioni per il ritiro e la riconsegna</a>: foto o video del mezzo sono obbligatori.</p>
         <button class="btn btn-primary ok-btn" id="modal-success-ok">Ho capito</button>
       </div>
     </div>

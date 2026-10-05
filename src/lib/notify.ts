@@ -9,7 +9,7 @@ export async function loadEmailBooking(id: string): Promise<EmailBooking | null>
            b.destination, b.usage_type, b.age_group, b.estimated_km, b.notes,
            b.driver_name, b.driver_phone, b.rejection_reason,
            v.name || COALESCE(' (' || v.model || ')', '') AS van_label,
-           v.pickup_location, v.return_instructions, v.rate
+           v.pickup_location, v.return_instructions
     FROM bookings b JOIN vans v ON v.id = b.van_id
     WHERE b.id = ${id}
   `;

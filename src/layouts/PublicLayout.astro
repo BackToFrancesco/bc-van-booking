@@ -83,6 +83,7 @@ const { title, heroTitle, heroSubtitle } = Astro.props;
       .info-box strong { color: #1a1a1a; }
       .info-box ul { margin: 0.4rem 0 0; padding-left: 1.2rem; }
       .info-box li { margin-bottom: 0.2rem; }
+      .info-box a { color: var(--red); font-weight: 600; }
 
       .contact-box {
         background: white;
@@ -146,6 +147,8 @@ const { title, heroTitle, heroSubtitle } = Astro.props;
       footer a { color: inherit; text-decoration: none; }
       footer a:hover { text-decoration: underline; }
       .footer-address { margin-top: 0.25rem; }
+      .footer-links { display: flex; justify-content: center; gap: 0.4rem 1.25rem; flex-wrap: wrap; margin-top: 0.75rem; font-weight: 600; }
+      .footer-links a { text-decoration: underline; }
       .footer-social { display: flex; justify-content: center; gap: 1rem; margin: 1.25rem 0 1rem; }
       .footer-social a {
         width: 28px; height: 28px; display: inline-flex;
@@ -208,6 +211,10 @@ const { title, heroTitle, heroSubtitle } = Astro.props;
     <footer>
       <div><a href={`mailto:${MAIL_FROM}`}>{MAIL_FROM}</a></div>
       <div class="footer-address">Via L. Traverso 6, Conselve 35026, PD</div>
+      <div class="footer-links">
+        <a href="/istruzioni">Istruzioni per ritiro e riconsegna</a>
+        <a href="/disciplinare.pdf" target="_blank" rel="noopener">Disciplinare (PDF)</a>
+      </div>
       <div class="footer-social">
         <a href="https://www.instagram.com/basketconselve/" target="_blank" rel="noopener" aria-label="Instagram">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

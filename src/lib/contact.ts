@@ -12,3 +12,6 @@ export type Contact = { name: string; phone: string; waLink: string };
 export const CONTACT: Contact | null = name && phone
   ? { name, phone, waLink: `https://wa.me/${phone.replace(/\D/g, '')}` }
   : null;
+
+/** Google Form of the electronic logbook (start/end time and km); link shown only when configured. */
+export const LOGBOOK_URL: string = import.meta.env.LOGBOOK_URL ?? '';

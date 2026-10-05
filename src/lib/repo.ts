@@ -3,6 +3,7 @@ import type { BookingStatus } from './booking-rules';
 
 export type Van = {
   id: string; name: string; model: string | null; seats: number; description: string | null; photo: string | null;
+  pickup_location: string | null; return_instructions: string | null;
 };
 
 export type Booking = {
@@ -23,11 +24,11 @@ export type BlockSeries = {
 };
 
 export async function listVans(): Promise<Van[]> {
-  return sql<Van>`SELECT id, name, model, seats, description, photo FROM vans ORDER BY sort_order, id`;
+  return sql<Van>`SELECT id, name, model, seats, description, photo, pickup_location, return_instructions FROM vans ORDER BY sort_order, id`;
 }
 
 export async function getVan(id: string): Promise<Van | null> {
-  const [van] = await sql<Van>`SELECT id, name, model, seats, description, photo FROM vans WHERE id = ${id}`;
+  const [van] = await sql<Van>`SELECT id, name, model, seats, description, photo, pickup_location, return_instructions FROM vans WHERE id = ${id}`;
   return van ?? null;
 }
 

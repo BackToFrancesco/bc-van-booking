@@ -2,7 +2,7 @@ import nodemailer from 'nodemailer';
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
 import { TZ } from './config';
-import { MAIL_FROM } from './contact';
+import { MAIL_FROM, LOGBOOK_URL } from './contact';
 import { formatDuration } from './time';
 import { USAGE_TYPES, AGE_GROUPS } from './booking-rules';
 
@@ -95,7 +95,6 @@ export type EmailBooking = {
   rejection_reason: string | null;
   pickup_location: string | null;
   return_instructions: string | null;
-  rate: string | null;
 };
 
 function siteUrl(): string {
@@ -211,35 +210,46 @@ export async function sendUserApproved(b: EmailBooking) {
     ['Destinazione', b.destination],
     ['Tipo di attività', usageLabel(b)],
     ['Conducente autorizzato', b.driver_name],
-    ['Tariffa applicata', b.rate],
   ];
-  const rules = [
-    'il mezzo può essere guidato esclusivamente dal conducente comunicato;',
-    'prima della partenza devono essere verificati e documentati con fotografie o video lo stato interno ed esterno del mezzo;',
-    'nel libretto di bordo elettronico devono essere inseriti orario e chilometri iniziali;',
-    "al termine dell'utilizzo devono essere inseriti orario e chilometri finali e devono essere effettuate le fotografie o il video della riconsegna;",
-    'eventuali danni, incidenti, anomalie o malfunzionamenti devono essere comunicati immediatamente;',
-    'il mezzo deve essere riconsegnato pulito e nelle condizioni in cui è stato ritirato' + (b.return_instructions ? ';' : '.'),
+  // Only the essentials here: the full rules live on the site
+  const essentials = [
+    'Il mezzo può essere guidato esclusivamente dal conducente indicato.',
+    'Al ritiro e alla riconsegna fai fotografie o un breve video dello stato interno ed esterno del mezzo: sono obbligatori.',
+    'Registra nel libretto di bordo elettronico orario e chilometri, alla partenza e al rientro.',
+    'Segnala subito eventuali danni, incidenti o anomalie.',
     ...(b.return_instructions ? [`${b.return_instructions.replace(/[.;]\s*$/, '')}.`] : []),
   ];
+  const instructionsUrl = `${siteUrl()}/istruzioni`;
+  const rulesUrl = `${siteUrl()}/disciplinare.pdf`;
   const intro = "la richiesta è stata accettata. Il pulmino è quindi prenotato per l'associazione indicata.";
-  const reminder = "Come previsto dal disciplinare già sottoscritto dall'associazione, ti ricordiamo che:";
-  const outro = `Le eventuali spese per sanzioni, parcheggi, pedaggi o accessi non autorizzati restano a carico del conducente o dell'associazione utilizzatrice.
+  const priority = 'Come previsto dal disciplinare, il Comune di Conselve può richiedere eccezionalmente il mezzo per esigenze istituzionali o di Protezione Civile: in tal caso sarete avvisati tempestivamente.';
 
-Come previsto dal disciplinare, il Comune di Conselve mantiene il diritto di richiedere eccezionalmente il mezzo per inderogabili esigenze istituzionali o di Protezione Civile. In tale eventualità sarete avvisati tempestivamente.
-
-Buon viaggio!`;
+  const linksText = [
+    `Istruzioni complete per il ritiro e la riconsegna: ${instructionsUrl}`,
+    ...(LOGBOOK_URL ? [`Libretto di bordo elettronico: ${LOGBOOK_URL}`] : []),
+    `Disciplinare: ${rulesUrl}`,
+  ].join('\n');
+  const button = (href: string, label: string, primary = false) =>
+    `<a href="${href}" style="background:${primary ? '#C8102E' : '#f3f4f6'};color:${primary ? '#ffffff' : '#1a1a1a'};padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block;font-weight:600;margin:0 6px 6px 0;">${label}</a>`;
 
   await send(
     b.email,
     `Prenotazione confermata — ${formatDate(b.start_at)}`,
-    `Ciao ${b.name},\n\n${intro}\n\n${fieldsText(fields)}\n\n${reminder}\n\n${rules.map((r) => `• ${r}`).join('\n')}\n\n${outro}\n\n${SIGNATURE_TEXT}\n`,
+    `Ciao ${b.name},\n\n${intro}\n\n${fieldsText(fields)}\n\nDa ricordare:\n\n${essentials.map((r) => `• ${r}`).join('\n')}\n\n${linksText}\n\n${priority}\n\nBuon viaggio!\n\n${SIGNATURE_TEXT}\n`,
     `<p>Ciao ${escapeHtml(b.name)},</p>
       <p>${escapeHtml(intro)}</p>
       <p>${fieldsHtml(fields)}</p>
-      <p>${escapeHtml(reminder)}</p>
-      <ul>${rules.map((r) => `<li>${escapeHtml(r)}</li>`).join('')}</ul>
-      ${paragraphsHtml(outro)}
+      <div style="background:#fffbeb;border-left:4px solid #f59e0b;border-radius:4px;padding:12px 16px;margin:16px 0;">
+        <strong>Da ricordare</strong>
+        <ul style="margin:8px 0 0;padding-left:20px;">${essentials.map((r) => `<li>${escapeHtml(r)}</li>`).join('')}</ul>
+      </div>
+      <p>
+        ${button(instructionsUrl, 'Istruzioni per ritiro e riconsegna', true)}
+        ${LOGBOOK_URL ? button(LOGBOOK_URL, 'Libretto di bordo') : ''}
+        ${button(rulesUrl, 'Disciplinare (PDF)')}
+      </p>
+      <p style="font-size:0.92em;color:#555;">${escapeHtml(priority)}</p>
+      <p>Buon viaggio!</p>
       ${SIGNATURE_HTML}`,
   );
 }

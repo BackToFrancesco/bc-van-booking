@@ -1,0 +1,101 @@
+---
+import PublicLayout from '../layouts/PublicLayout.astro';
+import { listVans } from '../lib/repo';
+import { LOGBOOK_URL } from '../lib/contact';
+import { PICKUP_MAPS_URL } from '../lib/config';
+
+const vans = await listVans();
+const pickupLocations = [...new Set(vans.map((v) => v.pickup_location).filter(Boolean))];
+---
+
+<PublicLayout
+  title="Istruzioni per il ritiro e la riconsegna — Pulmini Basket Conselve"
+  heroTitle="Ritiro e riconsegna"
+  heroSubtitle="Cosa fare prima, durante e dopo l'utilizzo del pulmino"
+>
+  <style>
+    .back-link { display: inline-block; margin-bottom: 1rem; color: #444; font-size: 0.9rem; font-weight: 600; text-decoration: none; }
+    .back-link:hover { color: var(--red); }
+    .must {
+      background: #fffbeb; border-left: 4px solid #f59e0b; border-radius: 8px;
+      padding: 1rem 1.25rem; margin-bottom: 1.25rem; font-size: 0.95rem; line-height: 1.55; color: #1a1a1a;
+    }
+    .card {
+      background: white; border-radius: 10px; padding: 1.25rem 1.4rem;
+      box-shadow: 0 2px 8px rgba(0,0,0,.07); margin-bottom: 1.25rem;
+    }
+    .card h2 {
+      font-size: 1rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em;
+      color: var(--red); margin-bottom: 0.75rem;
+    }
+    .card ul { padding-left: 1.2rem; font-size: 0.95rem; line-height: 1.6; color: #333; }
+    .card li { margin-bottom: 0.45rem; }
+    .card li:last-child { margin-bottom: 0; }
+    .card p { font-size: 0.95rem; line-height: 1.6; color: #333; }
+    .links { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.9rem; }
+    @media (max-width: 640px) {
+      .links .btn { width: 100%; min-height: 46px; }
+    }
+  </style>
+
+  <a class="back-link" href="/">← Tutti i pulmini</a>
+
+  <div class="must">
+    <strong>📸 Fotografie o video sono obbligatori, al ritiro e alla riconsegna.</strong><br />
+    In loro assenza, eventuali danni successivamente riscontrati potranno essere imputati
+    all'associazione utilizzatrice, salvo diversa comprovata evidenza.
+  </div>
+
+  {pickupLocations.length > 0 && (
+    <div class="card">
+      <h2>📍 Dove si ritira e si riconsegna</h2>
+      {pickupLocations.map((location) => <p>{location}</p>)}
+      <div class="links">
+        <a class="btn btn-primary" href={PICKUP_MAPS_URL} target="_blank" rel="noopener">Apri in Maps →</a>
+      </div>
+    </div>
+  )}
+
+  <div class="card">
+    <h2>Al ritiro del pulmino</h2>
+    <ul>
+      <li>Il mezzo può essere guidato esclusivamente dal conducente indicato nella prenotazione.</li>
+      <li>Prima di partire, verifica le condizioni interne ed esterne del pulmino, compreso lo stato di pulizia.</li>
+      <li>Effettua fotografie o un breve video che documentino chiaramente lo stato interno ed esterno del mezzo.</li>
+      <li>Segnala immediatamente eventuali danni, anomalie o problemi già presenti.</li>
+      <li>Compila il libretto di bordo elettronico inserendo data, orario di ritiro, destinazione, chilometri iniziali, conducente e associazione utilizzatrice.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>Durante l'utilizzo</h2>
+    <ul>
+      <li>L'associazione utilizzatrice è responsabile della custodia, della conduzione e del corretto utilizzo del mezzo fino alla sua riconsegna.</li>
+      <li>Il veicolo non può essere affidato a conducenti diversi da quello preventivamente comunicato.</li>
+      <li>In caso di incidente, danno, guasto o anomalia, raccogli tutta la documentazione necessaria e informa immediatamente Basket Conselve.</li>
+      <li>Sanzioni, accessi non autorizzati a ZTL, pedaggi e parcheggi restano a carico del conducente o dell'associazione utilizzatrice.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>Alla riconsegna</h2>
+    <ul>
+      <li>Riporta il pulmino nel luogo e all'orario indicati nella prenotazione.</li>
+      <li>Registra nel libretto di bordo elettronico l'orario di riconsegna e i chilometri finali.</li>
+      <li>Effettua nuovamente fotografie o un breve video dello stato interno ed esterno del mezzo.</li>
+      <li>Segnala eventuali danni, incidenti, anomalie o malfunzionamenti verificatisi durante l'utilizzo.</li>
+      <li>Riconsegna il mezzo pulito e nelle condizioni in cui è stato ritirato.</li>
+      <li><strong>Pulmino elettrico (Fiat):</strong> se la batteria è sotto il 35%, portalo dentro la palestra Morelli, lato spogliatoi, davanti ai box di ricarica; altrimenti riportalo dove lo hai ritirato.</li>
+      <li><strong>Pulmino ibrido (Ford):</strong> riconsegnalo con il serbatoio di benzina completamente pieno.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>Documenti</h2>
+    <p>Il servizio è regolato dal Disciplinare operativo e d'uso degli automezzi comunali.</p>
+    <div class="links">
+      <a class="btn btn-secondary" href="/disciplinare.pdf" target="_blank" rel="noopener">Disciplinare (PDF)</a>
+      {LOGBOOK_URL && <a class="btn btn-primary" href={LOGBOOK_URL} target="_blank" rel="noopener">Libretto di bordo elettronico →</a>}
+    </div>
+  </div>
+</PublicLayout>
