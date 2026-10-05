@@ -1,13 +1,8 @@
 import type { APIRoute } from 'astro';
-import sql from '../../../../lib/db';
 import { updateBooking } from '../../../../lib/booking-actions';
 import { json, error, readJson } from '../../../../lib/http';
 
-export const DELETE: APIRoute = async ({ params }) => {
-  const [deleted] = await sql`DELETE FROM bookings WHERE id = ${params.id!} RETURNING id`;
-  if (!deleted) return error('Prenotazione non trovata', 404);
-  return json({ ok: true });
-};
+// No DELETE on purpose: bookings are never removed, cancelling one means rejecting it (kept in the history).
 
 export const PATCH: APIRoute = async ({ params, request }) => {
   const body = await readJson<{ status?: string; start_at?: string; end_at?: string; notify?: boolean; rejection_reason?: string }>(request);

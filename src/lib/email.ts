@@ -258,24 +258,28 @@ export async function sendUserApproved(b: EmailBooking) {
   );
 }
 
-export async function sendUserRejected(b: EmailBooking) {
+/** `wasApproved`: the booking had already been confirmed, so this is a cancellation, not a refusal. */
+export async function sendUserRejected(b: EmailBooking, { wasApproved = false } = {}) {
   const fields: Field[] = [
     ['Associazione', b.company],
-    ['Pulmino richiesto', b.van_label],
+    [wasApproved ? 'Pulmino' : 'Pulmino richiesto', b.van_label],
     ['Ritiro', formatDateTime(b.start_at)],
     ['Riconsegna', formatDateTime(b.end_at)],
   ];
   const reason = b.rejection_reason ? `Motivazione: ${b.rejection_reason}` : '';
-  const outro = `La prenotazione non è quindi confermata. Puoi tornare sul sito per verificare la disponibilità degli altri mezzi o scegliere un periodo differente.
+  const intro = wasApproved
+    ? 'purtroppo la seguente prenotazione è stata annullata:'
+    : 'purtroppo non possiamo accettare la seguente richiesta:';
+  const outro = `La prenotazione non è quindi ${wasApproved ? 'più valida' : 'confermata'}. Puoi tornare sul sito per verificare la disponibilità degli altri mezzi o scegliere un periodo differente.
 
 Per eventuali chiarimenti puoi rispondere a questa email.`;
 
   await send(
     b.email,
-    `Richiesta non accettata — ${formatDate(b.start_at)}`,
-    `Ciao ${b.name},\n\npurtroppo non possiamo accettare la seguente richiesta:\n\n${fieldsText(fields)}\n\n${reason ? `${reason}\n\n` : ''}${outro}\n\n${SIGNATURE_TEXT}\n`,
+    `${wasApproved ? 'Prenotazione annullata' : 'Richiesta non accettata'} — ${formatDate(b.start_at)}`,
+    `Ciao ${b.name},\n\n${intro}\n\n${fieldsText(fields)}\n\n${reason ? `${reason}\n\n` : ''}${outro}\n\n${SIGNATURE_TEXT}\n`,
     `<p>Ciao ${escapeHtml(b.name)},</p>
-      <p>purtroppo non possiamo accettare la seguente richiesta:</p>
+      <p>${escapeHtml(intro)}</p>
       <p>${fieldsHtml(fields)}</p>
       ${b.rejection_reason ? `<p><strong>Motivazione:</strong> ${escapeHtml(b.rejection_reason)}</p>` : ''}
       ${paragraphsHtml(outro)}

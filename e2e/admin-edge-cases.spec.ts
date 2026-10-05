@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import {
-  adminLogin, choosePeriod, openEventInCalendar, startEdit, createRequestViaApi, dayOfWeek, daysFromNow, iso, makeRequest, pickDate, readOutbox,
+  adminLogin, choosePeriod, openEventInCalendar, startEdit, createRequestViaApi, dayOfWeek, daysFromNow, iso, makeRequest, pickDate, readOutbox, waitForEmail,
 } from './helpers';
 
 const DAY_SHORT = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
@@ -73,25 +73,43 @@ test('unchecking "Invia email" saves the change without emailing the user', asyn
   expect(emailsTo(r.email).map((e) => e.subject)).toEqual([expect.stringContaining('Richiesta ricevuta')]);
 });
 
-test('deleting a request frees the slot and sends no email', async ({ page, request }) => {
+test('bookings cannot be deleted: cancelling an accepted one rejects it and keeps it in the history', async ({ page, request }) => {
   const day = daysFromNow(46);
-  const r = makeRequest('Da Eliminare');
-  await createRequestViaApi(request, 'pulmino-3', day, 9, 18, r);
+  const r = makeRequest('Da Annullare');
+  const id = await createRequestViaApi(request, 'pulmino-3', day, 9, 18, r);
 
   await adminLogin(page);
+  await page.locator('.bookings-table tbody tr', { hasText: r.company }).getByRole('button', { name: 'Accetta' }).click();
+  await expect(page.locator('.bookings-table tbody tr', { hasText: r.company })).toHaveCount(0);
+
+  // The API has no delete at all
+  const del = await page.request.delete(`/api/admin/bookings/${id}`);
+  expect(del.ok()).toBe(false);
+
   await openEventInCalendar(page, r.company);
-  await page.locator('#detail-actions').getByRole('button', { name: 'Elimina' }).click();
-  await expect(page.locator('#detail-confirm-text')).toContainText(r.company);
-  await page.click('#detail-confirm-yes');
+  const actions = page.locator('#detail-actions');
+  await expect(actions.getByRole('button', { name: 'Elimina' })).toHaveCount(0);
+  await actions.getByRole('button', { name: 'Annulla prenotazione' }).click();
+  await expect(page.locator('#reject-title')).toHaveText('Annulla prenotazione');
+  await page.fill('#reject-reason', 'Mezzo richiesto dal Comune');
+  await page.click('#reject-confirm');
   await page.waitForLoadState('load');
-  await page.locator('.fc-dayGridMonth-button').click();
-  await expect(page.locator('.fc-event', { hasText: r.company })).toHaveCount(0);
+
+  // Still in the calendar, shown as rejected, with the reason
+  await openEventInCalendar(page, r.company);
+  await expect(page.locator('#detail-status')).toHaveValue('rejected');
+  await expect(page.locator('#detail-reason')).toHaveText('Mezzo richiesto dal Comune');
+  await expect(page.locator('#detail-actions').getByRole('button', { name: 'Annulla prenotazione' })).toHaveCount(0);
+
+  // The user is told it was cancelled (not "not accepted") and the slot is free again
+  const mail = await waitForEmail((e) => e.to === r.email && e.subject.includes('Prenotazione annullata'), 'cancellation');
+  expect(mail.text).toContain('la seguente prenotazione è stata annullata');
+  expect(mail.text).toContain('Motivazione: Mezzo richiesto dal Comune');
 
   const user = await page.context().newPage();
   await user.goto('/pulmini/pulmino-3');
   await choosePeriod(user, day, 9, day, 18);
   await expect(user.locator('#range-status')).toContainText('Pulmino 3 (Ford Ibrido) disponibile');
-  expect(emailsTo(r.email)).toHaveLength(1); // only "Richiesta ricevuta"
 });
 
 test('season block over an existing request warns, and "Crea comunque" creates it', async ({ page, request }) => {

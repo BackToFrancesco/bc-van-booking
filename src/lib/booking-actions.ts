@@ -56,7 +56,7 @@ export async function updateBooking(
     const b = await loadEmailBooking(id);
     if (b) {
       if (statusChanged && status === 'approved') sendInBackground('sendUserApproved', sendUserApproved(b));
-      else if (statusChanged && status === 'rejected') sendInBackground('sendUserRejected', sendUserRejected(b));
+      else if (statusChanged && status === 'rejected') sendInBackground('sendUserRejected', sendUserRejected(b, { wasApproved: current.status === 'approved' }));
       else if (timeChanged && status !== 'rejected') {
         sendInBackground('sendUserRescheduled', sendUserRescheduled({
           ...b, old_start_at: current.start_at, old_end_at: current.end_at,

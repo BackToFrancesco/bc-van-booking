@@ -26,7 +26,12 @@ export function iso(dateStr: string, hour: number): string {
 export type Email = { to: string; subject: string; text: string; html: string; replyTo?: string };
 
 export function readOutbox(): Email[] {
-  return existsSync(OUTBOX) ? JSON.parse(readFileSync(OUTBOX, 'utf8')) : [];
+  if (!existsSync(OUTBOX)) return [];
+  try {
+    return JSON.parse(readFileSync(OUTBOX, 'utf8'));
+  } catch {
+    return []; // caught mid-write by the server: the next poll reads it whole
+  }
 }
 
 /** Waits until an email matching `predicate` is in the outbox (emails are sent in background). */

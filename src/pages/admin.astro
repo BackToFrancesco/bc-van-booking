@@ -480,14 +480,6 @@ const fmtDate = (s: string) => s.split('-').reverse().join('/');
 
         <div id="detail-error" class="error-msg" style="display:none"></div>
 
-        <div id="detail-confirm-delete" style="display:none; margin-top:1.25rem; padding-top:1rem; border-top:1px solid #f0f0f0">
-          <p style="font-size:0.95rem; font-weight:600; margin-bottom:0.85rem" id="detail-confirm-text">Cancellare questa prenotazione?</p>
-          <div class="modal-actions" style="margin-top:0; padding-top:0; border-top:none">
-            <button class="btn btn-danger" id="detail-confirm-yes">Sì, cancella</button>
-            <button class="btn btn-secondary" id="detail-confirm-no">No</button>
-          </div>
-        </div>
-
         <div class="modal-actions" id="detail-actions"></div>
         <div class="modal-actions detail-edit-row" id="detail-edit-actions" style="display:none">
           <div id="detail-edit-reason-row" style="display:none">
@@ -512,7 +504,7 @@ const fmtDate = (s: string) => s.split('-').reverse().join('/');
     <div class="modal-overlay" id="reject-modal">
       <div class="modal">
         <div class="modal-header">
-          <h2>Rifiuta richiesta</h2>
+          <h2 id="reject-title">Rifiuta richiesta</h2>
           <button class="modal-close" id="reject-close" aria-label="Chiudi">×</button>
         </div>
         <p id="reject-summary" style="font-size:0.9rem;font-weight:600;color:var(--red);margin-bottom:0.75rem"></p>
@@ -586,8 +578,9 @@ const fmtDate = (s: string) => s.split('-').reverse().join('/');
       // ── Reject modal (a reason is required and emailed to the user) ─────
       let rejectId: string | null = null;
 
-      function openRejectModal(id: string, summary: string) {
+      function openRejectModal(id: string, summary: string, title = 'Rifiuta richiesta') {
         rejectId = id;
+        $('reject-title').textContent = title;
         $('reject-summary').textContent = summary;
         $<HTMLTextAreaElement>('reject-reason').value = '';
         $('reject-error').style.display = 'none';
@@ -772,7 +765,10 @@ const fmtDate = (s: string) => s.split('-').reverse().join('/');
         const helpEl = $('detail-notify-help');
         if (!hasChanges) helpEl.textContent = 'Nessuna modifica da salvare.';
         else if (statusChanged && status === 'approved') helpEl.textContent = 'Verrà inviata l\'email "Prenotazione confermata".';
-        else if (statusChanged && status === 'rejected') helpEl.textContent = 'Verrà inviata l\'email "Richiesta non accettata" con la motivazione.';
+        else if (statusChanged && status === 'rejected') {
+          const kind = detail.originalStatus === 'approved' ? 'Prenotazione annullata' : 'Richiesta non accettata';
+          helpEl.textContent = `Verrà inviata l'email "${kind}" con la motivazione.`;
+        }
         else if (timeChanged && status !== 'rejected') helpEl.textContent = 'Verrà inviata l\'email "Periodo aggiornato" con vecchio e nuovo periodo.';
         else helpEl.textContent = 'Nessuna email per il ritorno allo stato "In attesa".';
       }
@@ -794,7 +790,6 @@ const fmtDate = (s: string) => s.split('-').reverse().join('/');
         actions.style.display = 'flex';
         $('detail-error').style.display = 'none';
         $('detail-edit-actions').style.display = 'none';
-        $('detail-confirm-delete').style.display = 'none';
 
         if (p.type === 'booking') {
           $('detail-title').textContent = 'Dettagli prenotazione';
@@ -821,29 +816,18 @@ const fmtDate = (s: string) => s.split('-').reverse().join('/');
           detail = { bookingId: p.bookingId, originalStatus: p.status, originalStart: start, originalEnd: end };
           setEditMode(false);
 
+          // Bookings are never deleted: cancelling one means rejecting it, so it stays in the history
+          const summary = `${p.vanName} · ${p.company} · ${formatDateTime(start)}`;
           if (p.status === 'pending') {
             actions.append(
               actionButton('btn-approve', 'Accetta', () => apiPost(`/api/admin/bookings/${p.bookingId}/approve`)),
-              actionButton('btn-reject', 'Rifiuta', () => openRejectModal(p.bookingId, `${p.vanName} · ${p.company} · ${formatDateTime(start)}`)),
+              actionButton('btn-reject', 'Rifiuta', () => openRejectModal(p.bookingId, summary, 'Rifiuta richiesta')),
             );
           }
           actions.append(actionButton('btn-secondary', 'Modifica', () => setEditMode(true)));
-          actions.append(actionButton('btn-danger', 'Elimina', () => {
-            $('detail-confirm-text').textContent = `Eliminare definitivamente la prenotazione di ${p.company}? Nessuna email verrà inviata.`;
-            actions.style.display = 'none';
-            $('detail-confirm-delete').style.display = '';
-          }));
-
-          $('detail-confirm-no').onclick = () => {
-            $('detail-confirm-delete').style.display = 'none';
-            actions.style.display = 'flex';
-          };
-          $('detail-confirm-yes').onclick = async () => {
-            const res = await fetch(`/api/admin/bookings/${p.bookingId}`, { method: 'DELETE' });
-            closeModal('detail-modal');
-            if (res.ok) window.location.reload();
-            else alert('Errore cancellazione');
-          };
+          if (p.status === 'approved') {
+            actions.append(actionButton('btn-reject', 'Annulla prenotazione', () => openRejectModal(p.bookingId, summary, 'Annulla prenotazione')));
+          }
         } else {
           detail = null;
           $('detail-title').textContent = 'Dettagli blocco';
