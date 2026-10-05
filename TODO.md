@@ -6,10 +6,6 @@ Stato al 05/10/2026. Sito online: https://bc-van-booking.vercel.app
 
 - [ ] **Link al Google Form del libretto di bordo**: quando è pronto va nella variabile `LOGBOOK_URL` su Vercel
       (compare da solo nell'email di conferma e nella pagina `/istruzioni`)
-- [ ] **Disciplinare aggiornato**: sostituire `public/disciplinare.pdf` (la versione attuale salta dall'art. 3 all'art. 5)
-- [ ] Da chiarire con Loris:
-  - il disciplinare (art. 3) ammette le associazioni di Conselve **e San Pietro Viminario**; l'avviso sul sito dice solo "Comune di Conselve"
-  - il disciplinare (art. 7.2) dice che gli elettrici vanno **sempre** riconsegnati in ricarica; le istruzioni dicono solo sotto il 35%
 - [ ] Foto dei pulmini (opzionali, per le card in home)
 
 ## Da fare lato nostro
