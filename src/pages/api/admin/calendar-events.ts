@@ -1,7 +1,7 @@
 import type { APIRoute } from 'astro';
 import sql from '../../../lib/db';
 import { json, error, parseRangeParams } from '../../../lib/http';
-import { vanLabel } from '../../../lib/vans';
+import { vanLabel, vanCode } from '../../../lib/vans';
 
 const STATUS_COLOR: Record<string, string> = {
   pending:  '#eab308',
@@ -42,7 +42,7 @@ export const GET: APIRoute = async ({ url }) => {
       borderColor: STATUS_COLOR[b.status],
       classNames: b.status === 'rejected' ? ['ev-rejected'] : [],
       extendedProps: {
-        type: 'booking', bookingId: b.id, vanId: b.van_id,
+        type: 'booking', bookingId: b.id, vanId: b.van_id, vanCode: vanCode(b.van_id),
         vanName: vanLabel({ name: b.van_name, model: b.van_model }),
         name: b.name, company: b.company, email: b.email, phone: b.phone, status: b.status,
         destination: b.destination, usageType: b.usage_type, ageGroup: b.age_group, estimatedKm: b.estimated_km,
@@ -58,7 +58,7 @@ export const GET: APIRoute = async ({ url }) => {
       backgroundColor: STATUS_COLOR.blocked,
       borderColor: STATUS_COLOR.blocked,
       extendedProps: {
-        type: 'blocked', blockId: s.id, vanId: s.van_id, vanName: s.van_name ? vanLabel({ name: s.van_name, model: s.van_model }) : 'Tutti i pulmini',
+        type: 'blocked', blockId: s.id, vanId: s.van_id ?? '', vanCode: s.van_id ? vanCode(s.van_id) : 'Tutti', vanName: s.van_name ? vanLabel({ name: s.van_name, model: s.van_model }) : 'Tutti i pulmini',
         reason: s.reason, seriesId: s.series_id,
       },
     })),

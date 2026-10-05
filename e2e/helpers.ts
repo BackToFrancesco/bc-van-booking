@@ -139,6 +139,11 @@ export async function openEventInCalendar(page: Page, text: string) {
   const event = page.locator('.fc-event', { hasText: text }).first();
   const shows = () => event.waitFor({ state: 'visible', timeout: 1500 }).then(() => true, () => false);
 
+  // Rejected requests are hidden by default: show everything so any event can be found
+  const showRejected = page.locator('#show-rejected');
+  if (!(await showRejected.isChecked())) {
+    await Promise.all([loaded(), showRejected.check()]);
+  }
   await Promise.all([loaded(), page.locator('.fc-dayGridMonth-button').click()]);
   for (let i = 0; i < 14 && !(await shows()); i++) {
     await Promise.all([loaded(), page.locator('.fc-next-button').click()]);

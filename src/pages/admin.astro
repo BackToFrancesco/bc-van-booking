@@ -2,7 +2,7 @@
 import { listVans, listPendingBookings, listBlockSeries } from '../lib/repo';
 import { formatDateTime, formatDuration } from '../lib/time';
 import { isMockTransport } from '../lib/email';
-import { vanLabel } from '../lib/vans';
+import { vanLabel, vanCode } from '../lib/vans';
 import { USAGE_TYPES, AGE_GROUPS } from '../lib/booking-rules';
 
 const [vans, pendingBookings, blockSeries] = await Promise.all([
@@ -87,6 +87,8 @@ const fmtDate = (s: string) => s.split('-').reverse().join('/');
         -webkit-tap-highlight-color: transparent; touch-action: manipulation;
       }
       .chip.active { background: var(--red); border-color: var(--red); color: white; }
+      .toggle-rejected { display: inline-flex; align-items: center; gap: 0.4rem; margin-left: auto; font-size: 0.85rem; font-weight: 600; color: #555; cursor: pointer; }
+      .toggle-rejected input { width: 1rem; height: 1rem; accent-color: var(--red); }
       .legend { display: flex; gap: 1rem; flex-wrap: wrap; padding: 0.75rem 1.25rem 0; }
       .legend-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; font-weight: 500; }
       .dot { width: 11px; height: 11px; border-radius: 50%; }
@@ -268,8 +270,18 @@ const fmtDate = (s: string) => s.split('-').reverse().join('/');
       .fc .fc-day-today { background: rgba(200,16,46,.03) !important; }
       .fc .fc-timegrid-event, .fc .fc-daygrid-event { border-radius: 3px !important; cursor: pointer !important; }
       .fc .fc-event-title { font-size: 0.75rem; font-weight: 600; }
-      .fc .ev-rejected { opacity: 0.55; }
-      .fc .ev-rejected .fc-event-title { text-decoration: line-through; }
+      /* Compact event: van badge + time, then the association */
+      .fc .ev { padding: 1px 2px; overflow: hidden; line-height: 1.25; }
+      .fc .ev-head { display: flex; flex-wrap: wrap; align-items: center; gap: 1px 4px; font-size: 0.72rem; font-weight: 700; white-space: nowrap; }
+      .fc .ev-van { background: rgba(0,0,0,.28); border-radius: 3px; padding: 0 4px; flex-shrink: 0; }
+      .fc .ev-title { font-size: 0.74rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+      .fc .ev-tag { font-size: 0.62rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; }
+      .fc .fc-timegrid-event .ev-title { white-space: normal; }
+      .fc .fc-daygrid-event .ev { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+      .fc .fc-daygrid-event .ev-head { flex-wrap: nowrap; flex-shrink: 0; }
+      .fc .fc-daygrid-event .ev-title { white-space: nowrap; min-width: 0; flex: 1; }
+      .fc .fc-daygrid-event .ev-tag { flex-shrink: 0; }
+      .fc .ev-rejected { opacity: 0.75; }
       .fc .fc-day-past { background: repeating-linear-gradient(135deg, #f3f4f6, #f3f4f6 4px, #e9eaec 4px, #e9eaec 8px) !important; opacity: 0.7; }
       @media (max-width: 760px) {
         .fc .fc-toolbar { flex-wrap: wrap; gap: 0.5rem; }
@@ -349,7 +361,8 @@ const fmtDate = (s: string) => s.split('-').reverse().join('/');
         <div class="calendar-toolbar" id="van-filter">
           <span class="label">Pulmino</span>
           <button class="chip active" data-van="">Tutti</button>
-          {vans.map((v) => <button class="chip" data-van={v.id}>{vanLabel(v)}</button>)}
+          {vans.map((v) => <button class="chip" data-van={v.id}><strong>{vanCode(v.id)}</strong> · {vanLabel(v)}</button>)}
+          <label class="toggle-rejected"><input type="checkbox" id="show-rejected" /> Mostra rifiutate</label>
         </div>
         <div class="legend">
           <div class="legend-item"><div class="dot" style="background:#eab308"></div> In attesa</div>
@@ -920,6 +933,27 @@ const fmtDate = (s: string) => s.split('-').reverse().join('/');
         allDaySlot: false,
         height: 620,
         dayMaxEvents: 4,
+        // Events of different vans sit side by side (never on top of each other), ordered P1, P2, P3
+        slotEventOverlap: false,
+        eventOrder: 'vanId,start',
+        eventDisplay: 'block',
+        eventContent: (arg) => {
+          const p = arg.event.extendedProps as Record<string, any>;
+          const el = (tag: string, cls: string, text: string) => {
+            const n = document.createElement(tag);
+            n.className = cls;
+            n.textContent = text;
+            return n;
+          };
+          const wrap = el('div', 'ev', '');
+          const head = el('div', 'ev-head', '');
+          // Bookings are on the hour: "08:00 - 12:00" → "08–12" so it fits narrow columns
+          const time = arg.timeText.replace(/:00/g, '').replace(/\s*-\s*/, '–');
+          head.append(el('span', 'ev-van', p.type === 'blocked' ? `🔒 ${p.vanCode}` : p.vanCode), el('span', 'ev-time', time));
+          wrap.append(head, el('div', 'ev-title', p.type === 'booking' ? p.company : (p.reason ?? 'Bloccato')));
+          if (p.status === 'rejected') wrap.append(el('div', 'ev-tag', 'Rifiutata'));
+          return { domNodes: [wrap] };
+        },
         selectable: true,
         selectAllow: (info) => info.start >= new Date(),
         select: (info) => {
@@ -932,10 +966,16 @@ const fmtDate = (s: string) => s.split('-').reverse().join('/');
           const from = info.startStr.slice(0, 10);
           const to = info.endStr.slice(0, 10);
           const res = await fetch(`/api/admin/calendar-events?van=${currentVan}&from=${from}&to=${to}`);
-          return res.ok ? res.json() : [];
+          if (!res.ok) return [];
+          const events = await res.json();
+          // Rejected requests stay in the history but are hidden unless asked for
+          const showRejected = $<HTMLInputElement>('show-rejected').checked;
+          return showRejected ? events : events.filter((e: any) => e.extendedProps.status !== 'rejected');
         },
       });
       adminCalendar.render();
+
+      $('show-rejected').addEventListener('change', () => adminCalendar.refetchEvents());
 
       document.querySelectorAll<HTMLButtonElement>('#van-filter .chip').forEach((chip) => {
         chip.addEventListener('click', () => {

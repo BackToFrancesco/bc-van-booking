@@ -63,8 +63,8 @@ test('unchecking "Invia email" saves the change without emailing the user', asyn
   await startEdit(page, r.company);
   await page.evaluate((v) => (document.querySelector('#detail-end') as any)._flatpickr.setDate(v, true), `${day}T15:00`);
   await page.locator('#detail-notify').uncheck();
-  await page.click('#detail-save');
-  await page.waitForLoadState('load');
+  // The admin page reloads after saving: wait for the new page before going on
+  await Promise.all([page.waitForEvent('load'), page.click('#detail-save')]);
 
   // Saved: the new end shows in the detail, but no email went out
   await openEventInCalendar(page, r.company);
@@ -92,8 +92,8 @@ test('bookings cannot be deleted: cancelling an accepted one rejects it and keep
   await actions.getByRole('button', { name: 'Annulla prenotazione' }).click();
   await expect(page.locator('#reject-title')).toHaveText('Annulla prenotazione');
   await page.fill('#reject-reason', 'Mezzo richiesto dal Comune');
-  await page.click('#reject-confirm');
-  await page.waitForLoadState('load');
+  // The admin page reloads after saving: wait for the new page before going on
+  await Promise.all([page.waitForEvent('load'), page.click('#reject-confirm')]);
 
   // Still in the calendar, shown as rejected, with the reason
   await openEventInCalendar(page, r.company);
