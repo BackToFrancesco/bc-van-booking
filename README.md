@@ -77,7 +77,25 @@ schema.sql                       # DB schema + van seed
 |---|---|
 | `npm run dev` | Dev server |
 | `npm test` | Unit tests (booking rules, time zone helpers) |
+| `npm run test:e2e` | End-to-end tests in a real browser (see below) |
+| `npm run test:e2e:ui` | Same, with Playwright's visual runner (watch each click) |
+| `npm run test:smoke` | Read-only checks on the live site (`SMOKE_URL` to override) |
 | `npm run build` | Production build |
+
+## Tests
+
+**End-to-end** (`e2e/`, Playwright): a browser clicks through the site like a user and an admin would:
+request from the home page, form validation, busy van → suggested alternatives, instructions/PDF, mobile in another
+time zone, admin accept / reject with reason / edit period / rejected → accepted, drag-to-block on the calendar,
+season blocks, and admin security (including the forged-cookie case).
+
+- The dev server starts in `--mode e2e` (`.env.e2e`): a throwaway PGlite database (`.pglite-e2e/`) and mocked emails
+  (`.mail-outbox-e2e/`), both wiped at each run. Tests read the outbox to check email contents. Never touches Neon.
+- Locally the installed Google Chrome is used; CI installs Playwright's Chromium.
+- Dates are relative to today, so tests never expire; each test uses its own van/dates.
+
+**CI** (`.github/workflows/tests.yml`): on every push and PR runs unit + e2e tests; after a push to `main` waits for
+the Vercel deploy and runs the smoke tests against production.
 
 ## Notes
 

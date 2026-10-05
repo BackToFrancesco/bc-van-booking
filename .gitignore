@@ -18,6 +18,7 @@ pnpm-debug.log*
 .env
 .env.*
 !.env.example
+!.env.e2e
 
 # macOS
 .DS_Store
@@ -34,3 +35,9 @@ skills-lock.json
 # local data
 .pglite/
 .mail-outbox/
+
+# end-to-end tests
+.pglite-e2e/
+.mail-outbox-e2e/
+test-results/
+playwright-report/

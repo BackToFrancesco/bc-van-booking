@@ -9,7 +9,11 @@ import { USAGE_TYPES, AGE_GROUPS } from './booking-rules';
 const SENDER_NAME = 'Servizio Pulmini — Basket Conselve ASD';
 const SUBJECT_PREFIX = 'BC Pulmini';
 
-export const OUTBOX_FILE = resolve(process.cwd(), '.mail-outbox/emails.json');
+// MAIL_OUTBOX lets end-to-end tests read the mocked emails from their own file
+export const OUTBOX_FILE = resolve(
+  process.cwd(),
+  import.meta.env.MAIL_OUTBOX || process.env.MAIL_OUTBOX || '.mail-outbox/emails.json',
+);
 
 type MailOptions = { from: string; to: string; replyTo?: string; subject: string; text: string; html: string };
 export type OutboxEmail = MailOptions & { id: string; timestamp: string };

@@ -20,7 +20,9 @@ function createPgliteSql(): SqlTag {
   // Reuse the instance across dev-server HMR reloads (PGlite holds a lock on the data dir)
   g.__pglite ??= (async () => {
     const { PGlite } = await import('@electric-sql/pglite');
-    const db = await PGlite.create(resolve(process.cwd(), '.pglite'));
+    // PGLITE_DIR lets end-to-end tests use their own throwaway database
+    const dir = import.meta.env.PGLITE_DIR || process.env.PGLITE_DIR || '.pglite';
+    const db = await PGlite.create(resolve(process.cwd(), dir));
     await db.exec(readFileSync(resolve(process.cwd(), 'schema.sql'), 'utf8'));
     return db;
   })();
