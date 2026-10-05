@@ -18,7 +18,6 @@ Stato al 05/10/2026. Sito online: https://bc-van-booking.vercel.app
       poi aggiornare `DATABASE_URL` nel `.env` locale (branch dev) e su Vercel (production)
 - [ ] Variabili d'ambiente anche per **Preview** su Vercel (ora solo Production → i deploy di preview falliscono)
 - [ ] **bc-booking**: applicare lo stesso fix di sicurezza dell'admin (senza `ADMIN_PASSWORD` il cookie admin è falsificabile), vedi commit `60b35d9`
-- [ ] Controllare che il link "Apri in Maps" (`PICKUP_MAPS_URL` in `src/lib/config.ts`) porti al punto giusto
 
 ## Fatto
 
@@ -27,3 +26,5 @@ Stato al 05/10/2026. Sito online: https://bc-van-booking.vercel.app
 - [x] Pagina `/istruzioni` + disciplinare PDF sul sito, email di conferma con le sole cose essenziali
 - [x] Branch `dev` su Neon per lo sviluppo locale
 - [x] Richieste di prova cancellate dal database di produzione
+- [x] Link "Apri in Maps" sul punto esatto (Basket Conselve A.S.D., palestra Morelli)
+- [x] Test end-to-end (Playwright), controllo produzione e GitHub Actions
