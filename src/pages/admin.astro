@@ -158,26 +158,30 @@ const fmtDate = (s: string) => s.split('-').reverse().join('/');
         .bookings-table thead { display: none; }
         .bookings-table tr { display: block; padding: 0.85rem 1rem; border-bottom: none; }
         .bookings-table tr + tr { border-top: 2px solid #e0e0e0; }
+        /* Label on the left, the whole value as one block on the right (a cell can hold several elements) */
         .bookings-table td {
-          display: grid;
-          grid-template-columns: 78px 1fr;
-          align-items: start;
-          gap: 0.2rem 0.5rem;
-          padding: 0.18rem 0;
+          display: block;
+          position: relative;
+          padding: 0.3rem 0 0.3rem 6.75rem;
           border: none;
           font-size: 0.84rem;
+          line-height: 1.45;
+          overflow-wrap: anywhere;
         }
         .bookings-table td::before {
           content: attr(data-label);
+          position: absolute;
+          left: 0;
+          top: 0.42rem;
+          width: 6.25rem;
           font-weight: 700;
           font-size: 0.68rem;
           text-transform: uppercase;
           color: #999;
           letter-spacing: 0.04em;
-          padding-top: 2px;
           white-space: nowrap;
         }
-        .bookings-table td[data-label="Azioni"] { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.75rem; }
+        .bookings-table td[data-label="Azioni"] { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.75rem; padding-left: 0; }
         .bookings-table td[data-label="Azioni"]::before { display: none; }
         .bookings-table td[data-label="Azioni"] .btn { margin: 0; padding: 0.65rem 1rem; font-size: 0.92rem; width: 100%; min-height: 44px; }
         .bookings-table td.empty { display: block; }

@@ -1,25 +1,11 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 import {
-  adminLogin, choosePeriod, createRequestViaApi, dayOfWeek, daysFromNow, makeRequest, pickDate, waitForEmail,
+  adminLogin, choosePeriod, openEventInCalendar, startEdit, createRequestViaApi, dayOfWeek, daysFromNow, makeRequest, pickDate, waitForEmail,
 } from './helpers';
 
 const DAY_SHORT = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
 
-/** Admin calendar: month view, then forward until the event of `company` shows up, and open it. */
-async function openEventInCalendar(page: Page, company: string) {
-  await page.locator('.fc-dayGridMonth-button').click();
-  const event = page.locator('.fc-event', { hasText: company }).first();
-  for (let i = 0; i < 14 && !(await event.isVisible()); i++) {
-    await page.locator('.fc-next-button').click();
-  }
-  await event.click();
-  await expect(page.locator('#detail-modal')).toBeVisible();
-}
 
-async function startEdit(page: Page, company: string) {
-  await openEventInCalendar(page, company);
-  await page.locator('#detail-actions').getByRole('button', { name: 'Modifica' }).click();
-}
 
 test('admin accepts a pending request from the table', async ({ page, request }) => {
   const r = makeRequest('Da Accettare');

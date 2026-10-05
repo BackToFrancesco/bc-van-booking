@@ -125,6 +125,29 @@ export async function fillRequestForm(page: Page, r: Request, { declareLicense =
   if (declareLicense) await page.locator('#inp-license').check();
 }
 
+/**
+ * Admin calendar: switches to month view and moves forward until the event containing `text` shows up,
+ * then opens it. Waits for each month's events to load before deciding to move on.
+ */
+export async function openEventInCalendar(page: Page, text: string) {
+  const loaded = () => page.waitForResponse((r) => r.url().includes('/api/admin/calendar-events'));
+  const event = page.locator('.fc-event', { hasText: text }).first();
+  const shows = () => event.waitFor({ state: 'visible', timeout: 1500 }).then(() => true, () => false);
+
+  await Promise.all([loaded(), page.locator('.fc-dayGridMonth-button').click()]);
+  for (let i = 0; i < 14 && !(await shows()); i++) {
+    await Promise.all([loaded(), page.locator('.fc-next-button').click()]);
+  }
+  await event.click();
+  await expect(page.locator('#detail-modal')).toBeVisible();
+}
+
+/** Opens the event and switches the detail modal to edit mode. */
+export async function startEdit(page: Page, text: string) {
+  await openEventInCalendar(page, text);
+  await page.locator('#detail-actions').getByRole('button', { name: 'Modifica' }).click();
+}
+
 export async function adminLogin(page: Page) {
   await page.goto('/admin-login');
   await page.fill('#password', ADMIN_PASSWORD);
